@@ -19,8 +19,8 @@ import time
 
 import pyrender
 import torch
-from lcp_physics.physics import World
-from lcp_physics.physics.utils import get_instance
+from diffworld.diffsdfsim.lcp_physics.physics import World
+from diffworld.diffsdfsim.lcp_physics.physics.utils import get_instance
 from torch.nn.functional import normalize
 
 from . import contacts as contacts_module

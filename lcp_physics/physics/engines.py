@@ -10,7 +10,7 @@ Based on: M. B. Cline, Rigid body simulation with contact and constraints, 2002
 
 import torch
 
-from lcp_physics.lcp.lcp import LCPFunction
+from diffworld.diffsdfsim.lcp_physics.lcp.lcp import LCPFunction
 
 
 class Engine:

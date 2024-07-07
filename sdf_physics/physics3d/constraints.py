@@ -16,11 +16,11 @@
 # limitations under the License.
 #
 import torch
-from lcp_physics.physics import TotalConstraint, RotConstraint
+from diffworld.diffsdfsim.lcp_physics.physics import TotalConstraint, RotConstraint
 from pytorch3d.transforms import quaternion_invert, quaternion_multiply, quaternion_apply
 from torch.nn.functional import normalize
 
-from sdf_physics.physics3d.utils import (cart_to_spherical, spherical_to_cart, Indices, Defaults3D, skew_symmetric_mat,
+from diffworld.diffsdfsim.sdf_physics.physics3d.utils import (cart_to_spherical, spherical_to_cart, Indices, Defaults3D, skew_symmetric_mat,
                                          orthogonal, get_tensor)
 
 X = Indices.X

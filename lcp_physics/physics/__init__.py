@@ -3,13 +3,13 @@
 # https://github.com/locuslab/lcp-physics/tree/a85ecfe0fdc427ee016f3d1c2ddb0d0c0f98f21b/lcp_physics, licensed under the
 # Apache License, version 2.0 (see LICENSE).
 #
-import lcp_physics.physics.bodies
-import lcp_physics.physics.contacts
-import lcp_physics.physics.constraints
-import lcp_physics.physics.engines
-import lcp_physics.physics.forces
-import lcp_physics.physics.utils
-import lcp_physics.physics.world
+import diffworld.diffsdfsim.lcp_physics.physics.bodies
+import diffworld.diffsdfsim.lcp_physics.physics.contacts
+import diffworld.diffsdfsim.lcp_physics.physics.constraints
+import diffworld.diffsdfsim.lcp_physics.physics.engines
+import diffworld.diffsdfsim.lcp_physics.physics.forces
+import diffworld.diffsdfsim.lcp_physics.physics.utils
+import diffworld.diffsdfsim.lcp_physics.physics.world
 
 from .utils import Defaults
 from .bodies import Body, Circle, Rect, Hull

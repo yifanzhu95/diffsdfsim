@@ -28,8 +28,8 @@ from ev_sdf_utils import marching_cubes, grid_interp
 from torch.autograd import Function
 from torch.nn.functional import normalize
 
-from lcp_physics.physics import Body
-from lcp_physics.physics.utils import polar_to_cart
+from diffworld.diffsdfsim.lcp_physics.physics import Body
+from diffworld.diffsdfsim.lcp_physics.physics.utils import polar_to_cart
 from .utils import Defaults3D, get_tensor, spherical_to_cart, quat
 
 DIM = Defaults3D.DIM

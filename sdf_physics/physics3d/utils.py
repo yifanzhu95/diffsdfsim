@@ -30,12 +30,13 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 from pyhocon import ConfigFactory
 from pytorch3d.transforms import axis_angle_to_matrix
 
-from lcp_physics.physics import Defaults
-from lcp_physics.physics.utils import Recorder, Indices
+from diffworld.diffsdfsim.lcp_physics.physics import Defaults
+from diffworld.diffsdfsim.lcp_physics.physics.utils import Recorder, Indices
 
-if not 'IGR_PATH' in os.environ:
-    os.environ['IGR_PATH'] = (Path(__file__).parent.parent.parent.parent / 'IGR').as_posix()
-assert Path(os.environ['IGR_PATH']).exists(), "Could not find IGR repository"
+## This is not needed for our purposes. This is their SDF representation.
+# if not 'IGR_PATH' in os.environ:
+#     os.environ['IGR_PATH'] = (Path(__file__).parent.parent.parent.parent / 'IGR').as_posix()
+# assert Path(os.environ['IGR_PATH']).exists(), "Could not find IGR repository"
 
 
 class Defaults3D(Defaults):
@@ -51,7 +52,7 @@ class Defaults3D(Defaults):
     # Default simulation parameters
     FRIC_DIRS = 8
 
-    CONTACT = "FWContactHandler"
+    CONTACT = 'SDFGSDiffContactHandler' #"FWContactHandler"
 
     # Whether to use custom meshes/inertia tensors for analytic shapes
     CUSTOM_MESH = False

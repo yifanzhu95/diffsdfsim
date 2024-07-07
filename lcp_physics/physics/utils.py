@@ -48,7 +48,7 @@ class Defaults:
     FRIC_COEFF = 0.9
     FRIC_DIRS = 2
 
-    FPS = 30
+    FPS = 100 #30 #change the default time step to 0.01
     DT = 1.0 / FPS
 
     ENGINE = 'PdipmEngine'

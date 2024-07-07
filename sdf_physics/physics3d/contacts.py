@@ -16,7 +16,7 @@
 # limitations under the License.
 #
 import torch
-from lcp_physics.physics.contacts import ContactHandler, OdeContactHandler
+from diffworld.diffsdfsim.lcp_physics.physics.contacts import ContactHandler, OdeContactHandler
 from pytorch3d.transforms import quaternion_apply, quaternion_invert, quaternion_multiply
 from scipy.spatial.qhull import ConvexHull, QhullError
 
@@ -271,3 +271,79 @@ class FWContactHandler(ContactHandler):
 
         return torch.all(pens <= world.tol)
 
+
+class SDFGSDiffContactHandler(ContactHandler):
+    """Differentiable contact handler, operations to calculate contact manifold
+    are done in autograd.
+    """
+    def __init__(self):
+        self.debug_callback = OdeContactHandler()
+
+    def __call__(self, args, geom1, geom2):
+        # self.debug_callback(args, geom1, geom2)
+        # world is added a list of contacts, where each contact is tupe
+        # (normals, p1, p2, pen)
+        # normal is contact normal relative to b2 (outward of b2)
+        # Calulated based off of the deeper penetration point
+        # p1 and p2 are contact points on b1 and b2 relative to b1 and b2, in global frame
+        # pen (>0) is the pen depth of b1's points in b2, negates dist
+
+        if geom1 in geom2.no_contact:
+            return
+        world = args[0]
+
+        b1 = world.bodies[geom1.body]
+        b2 = world.bodies[geom2.body]
+
+        types = [b1.type, b2.type]
+        if 'obj' not in types:
+            return 
+
+        if 'robot' in types and 'obj' in types:
+            ## TODO implement robot primitive geometry collision handling
+            return
+
+        if b1.type == 'obj' and b2.type == 'obj':
+            sdf_body = b1
+            sdf_index = 1
+            gs_body = b2
+            gs_index = 2
+
+        if 'obj' in types and 'terrain' in types:
+            # no sdf for terrain, only use GS
+            if b1.type == 'obj':
+                sdf_body = b1
+                sdf_index = 1
+                gs_body = b2
+                gs_index = 2
+            else:
+                sdf_body = b2
+                sdf_index = 2
+                gs_body = b1
+                gs_index = 1
+
+        #TODO cluster contact points 
+        # GS pts are all in global frame
+        xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.sdf.GS_xyz - sdf_body.pos)
+        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame/sdf_body.scale_tensor)
+        sdfs *= sdf_body.scale_tensor
+
+        contact_mask = sdfs <= world.eps
+        sdfs = sdfs[contact_mask]
+        normals = normals[contact_mask]
+        pens = -sdfs
+        
+        gs_pts = gs_body.sdf.GS_xyz[contact_mask] - gs_body.pos
+        sdf_pts = gs_body.sdf.GS_xyz[contact_mask] - sdf_body.pos
+
+        pts = []
+        if sdf_index == 2:
+            for normal, pt1, pt2, pen in zip(normals, gs_pts, sdf_pts, pens):
+                pts.append((normal, pt1, pt2, pen))
+        elif sdf_index == 1:
+            normals *= -1 
+            for normal, pt1, pt2, pen in zip(normals, sdf_pts, gs_pts, pens):
+                pts.append((normal, pt1, pt2, pen))
+
+        for p in pts:
+            world.contacts.append((p, geom1.body, geom2.body))

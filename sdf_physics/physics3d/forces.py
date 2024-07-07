@@ -15,7 +15,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 #
-from lcp_physics.physics import ExternalForce
+from diffworld.diffsdfsim.lcp_physics.physics import ExternalForce
 
 from .utils import get_tensor
 
