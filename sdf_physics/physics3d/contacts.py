@@ -324,17 +324,17 @@ class SDFGSDiffContactHandler(ContactHandler):
 
         #TODO cluster contact points 
         # GS pts are all in global frame
-        xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.sdf.GS_xyz - sdf_body.pos)
-        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame/sdf_body.scale_tensor)
+        xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.GS_xyz - sdf_body.pos)
+        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame*sdf_body.scale_tensor)
         sdfs *= sdf_body.scale_tensor
 
-        contact_mask = sdfs <= world.eps
+        contact_mask = (sdfs <= world.eps)[:,0]
         sdfs = sdfs[contact_mask]
         normals = normals[contact_mask]
         pens = -sdfs
         
-        gs_pts = gs_body.sdf.GS_xyz[contact_mask] - gs_body.pos
-        sdf_pts = gs_body.sdf.GS_xyz[contact_mask] - sdf_body.pos
+        gs_pts = gs_body.GS_xyz[contact_mask] - gs_body.pos
+        sdf_pts = gs_body.GS_xyz[contact_mask] - sdf_body.pos
 
         pts = []
         if sdf_index == 2:
