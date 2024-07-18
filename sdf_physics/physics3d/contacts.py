@@ -19,10 +19,54 @@ import torch
 from diffworld.diffsdfsim.lcp_physics.physics.contacts import ContactHandler, OdeContactHandler
 from pytorch3d.transforms import quaternion_apply, quaternion_invert, quaternion_multiply
 from scipy.spatial.qhull import ConvexHull, QhullError
-
+from pykeops.torch import LazyTensor
+import time
 from .bodies import SDF3D, Body3D
 from .utils import Defaults3D
+from icecream import ic
+import numpy as np
+def KMeans(x, K=10, Niter=10, verbose=False):
+    """Implements Lloyd's algorithm for the Euclidean metric."""
+    start = time.time()
+    N, D = x.shape  # Number of samples, dimension of the ambient space
 
+    c = x[:K, :].clone()  # Simplistic initialization for the centroids
+
+    x_i = LazyTensor(x.view(N, 1, D))  # (N, 1, D) samples
+    c_j = LazyTensor(c.view(1, K, D))  # (1, K, D) centroids
+
+    # K-means loop:
+    # - x  is the (N, D) point cloud,
+    # - cl is the (N,) vector of class labels
+    # - c  is the (K, D) cloud of cluster centroids
+    for i in range(Niter):
+        # E step: assign points to the closest cluster -------------------------
+        D_ij = ((x_i - c_j) ** 2).sum(-1)  # (N, K) symbolic squared distances
+        cl = D_ij.argmin(dim=1).long().view(-1)  # Points -> Nearest cluster
+
+        # M step: update the centroids to the normalized cluster average: ------
+        # Compute the sum of points per cluster:
+        c.zero_()
+        c.scatter_add_(0, cl[:, None].repeat(1, D), x)
+
+        # Divide by the number of points per cluster:
+        Ncl = torch.bincount(cl, minlength=K).type_as(c).view(K, 1)
+        c /= Ncl  # in-place division to compute the average
+
+    if verbose:  # Fancy display -----------------------------------------------
+        if use_cuda:
+            torch.cuda.synchronize()
+        end = time.time()
+        print(
+            f"K-means for the Euclidean metric with {N:,} points in dimension {D:,}, K = {K:,}:"
+        )
+        print(
+            "Timing for {} iterations: {:.5f}s = {} x {:.5f}s\n".format(
+                Niter, end - start, Niter, (end - start) / Niter
+            )
+        )
+
+    return cl, c
 
 def _overlap(b1, b2):
     v1 = b1.get_surface()[0]
@@ -324,18 +368,109 @@ class SDFGSDiffContactHandler(ContactHandler):
 
         #TODO cluster contact points 
         # GS pts are all in global frame
-        xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.GS_xyz - sdf_body.pos)
-        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame*sdf_body.scale_tensor)
-        sdfs *= sdf_body.scale_tensor
 
+        # GS xyz point position in sdf frame, scaled
+        xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.get_gs() - sdf_body.pos)*sdf_body.scale_tensor
+        padding = world.configs['sdf_collision_detection_padding']
+
+        # import open3d as o3d
+        # mesh_box = o3d.geometry.TriangleMesh.create_box(width=0.1,
+        #                                         height=0.2,
+        #                                         depth=0.1).translate((-0.05,-0.1, 0.01))
+        # mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        #     size=0.6, origin=[0,0,0])
+        # p= o3d.geometry.PointCloud()
+        # tmp = gs_body.get_gs().cpu().detach().numpy()
+        # p.points = o3d.utility.Vector3dVector(tmp)
+        # o3d.visualization.draw_geometries([p, mesh_box, mesh_frame])
+        
+        BB_mask = torch.logical_and(xyz_sdf_frame[:,0] < (1 + padding), xyz_sdf_frame[:,0] > (-1 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,1] < (1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,1] > (-1 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,2] < (1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,2] > (-1 - padding))
+        
+        #ic(xyz_sdf_frame[-3:])
+    
+        xyz_sdf_frame = xyz_sdf_frame[BB_mask]
+        #ic(xyz_sdf_frame[-3:])
+        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame)
+        #ic(sdfs[-3:])
+        #ic(sdfs)
+        sdfs = sdfs/sdf_body.scale_tensor
         contact_mask = (sdfs <= world.eps)[:,0]
+        #ic(sdfs[contact_mask])
         sdfs = sdfs[contact_mask]
         normals = normals[contact_mask]
-        pens = -sdfs
-        
-        gs_pts = gs_body.GS_xyz[contact_mask] - gs_body.pos
-        sdf_pts = gs_body.GS_xyz[contact_mask] - sdf_body.pos
+        xyz_sdf_frame = xyz_sdf_frame[contact_mask]
+        if len(sdfs) <= world.configs['N_contact_cluster']:  
+            pens = -sdfs
+            gs_pts = (gs_body.get_gs()[BB_mask])[contact_mask] - gs_body.pos
+            sdf_pts = (gs_body.get_gs()[BB_mask])[contact_mask]  - sdf_body.pos
+        else:
+            grid_origin = torch.min(xyz_sdf_frame, axis = 0)[0]
+            grid_size = world.configs['grid_size']*sdf_body.scale
 
+            side_sizes = torch.max(xyz_sdf_frame, axis = 0)[0] - grid_origin
+            voxels = torch.ceil(side_sizes/grid_size)
+            indeces = []
+            xyz_copy = xyz_sdf_frame.clone() - grid_origin
+            xyz_copy /= side_sizes
+            xyz_copy *= voxels
+            xyz_copy = torch.ceil(xyz_copy)
+
+            xyz_copy = xyz_copy.detach().cpu().numpy().astype(int)
+            voxels = voxels.detach().cpu().numpy().astype(int) + 1
+            for i in range(voxels[0]):
+                for j in range(voxels[1]):
+                    for k in range(voxels[2]):
+                        
+                        idx =np.where((xyz_copy == [i,j,k]).all(axis=1))[0]
+                        if idx.size > 0:
+                            indeces.append(idx[0])
+            sdfs = sdfs[indeces]
+            pens = -sdfs
+            #ic(pens[-1])
+            normals = normals[indeces]
+            gs_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[indeces] - gs_body.pos
+            sdf_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[indeces]- sdf_body.pos
+
+            # Use K means clustering
+            # xyz_sdf_frame_copy = xyz_sdf_frame[contact_mask].detach().clone()
+            # xyz_sdf_frame =  xyz_sdf_frame[contact_mask]
+            # cl, c = KMeans(xyz_sdf_frame_copy, world.configs['N_contact_cluster'])
+            # clusterred_pt_indeces = []
+            # ic(c)
+            # exit()
+            # for d in range(world.configs['N_contact_cluster']):
+            #     centroid = c[d]
+            #     #ic(centroid.shape)
+            #     pts = xyz_sdf_frame_copy[cl == d]
+            #     dists = torch.cdist(centroid.unsqueeze(0), pts)
+                
+            #     _, idx = torch.min(dists, dim = 1)
+            #     #ic(idx)
+            #     clusterred_pt_indeces.append(idx)
+            # sdfs = sdfs[clusterred_pt_indeces]
+            # pens = -sdfs
+            # ic(pens)
+            # normals = normals[clusterred_pt_indeces]
+            # gs_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[clusterred_pt_indeces] - gs_body.pos
+            # sdf_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[clusterred_pt_indeces]- sdf_body.pos
+    
+        # ic(sdfs.shape, torch.max(sdfs), torch.min(sdfs))
+        # tmp = ((gs_body.get_gs()[BB_mask])[contact_mask])[clusterred_pt_indeces]
+        # tmp = tmp.cpu().detach().numpy()
+        # ic(tmp)
+        # import open3d as o3d
+        # mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        #     size=0.6, origin=[0,0,0])
+        # p= o3d.geometry.PointCloud()
+        # p.points = o3d.utility.Vector3dVector(tmp)
+        # o3d.visualization.draw_geometries([p, mesh_box, mesh_frame])
+        # exit()
+        # exit()
+        
         pts = []
         if sdf_index == 2:
             for normal, pt1, pt2, pen in zip(normals, gs_pts, sdf_pts, pens):

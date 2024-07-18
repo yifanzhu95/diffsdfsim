@@ -44,9 +44,10 @@ class World:
                  contact_callback=Defaults.CONTACT, eps=Defaults.EPSILON,
                  tol=Defaults.TOL, fric_dirs=Defaults.FRIC_DIRS,
                  post_stab=Defaults.POST_STABILIZATION, strict_no_penetration=True,
-                 time_of_contact_diff=False, stop_contact_grad=False, stop_friction_grad=False):
+                 time_of_contact_diff=False, stop_contact_grad=False, stop_friction_grad=False,
+                 configs = None):
         self.contacts_debug = None  # XXX
-
+        self.configs = configs
         # Load classes from string name defined in utils
         self.engine = get_instance(engines_module, engine)
         self.contact_callback = get_instance(contacts_module, contact_callback)
@@ -126,7 +127,10 @@ class World:
         had_contacts = False
         dt = self.dt
         if fixed_dt:
+            from icecream import ic
+            
             end_t = self.t + self.dt
+            #ic(self.t, end_t)
             while self.t < end_t:
                 dt = end_t - self.t
                 self.step_dt(dt)
@@ -245,7 +249,11 @@ class World:
         #       larger accelerations when timesteps get smaller and that can become problematic.
         start_v = self.v
         start_contacts = self.contacts
-
+        # from icecream import ic
+        # ic(len(self.contacts))
+        # for i in range(10):
+        #     ic(self.contacts[i])
+        #ic(self.contacts[0], self.contacts[1].ID, self.contacts[2].ID)
         while True:
 
             dt_ = dt
@@ -275,7 +283,6 @@ class World:
                                     if {c[1], c[2]} not in [{prev_c[1], prev_c[2]} for prev_c in start_contacts]]
             if self.time_of_contact_diff and self.toc_contacts:
                 #print( '\n contacts \n', len(self.contacts) )
-
                 vs1 = torch.stack([self.bodies[c[1]].v for c in self.toc_contacts])
                 cs1 = torch.stack([c[0][1] for c in self.toc_contacts])
                 poss1 = torch.stack([self.bodies[c[1]].pos for c in self.toc_contacts])
@@ -341,7 +348,7 @@ class World:
 
                 self.last_dt = dt_
 
-            #     break
+            break
             # else:
             #     if not self.strict_no_pen and dt < self.dt / 2**10:
             #         # if step becomes too small, just continue

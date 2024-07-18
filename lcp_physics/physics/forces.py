@@ -37,6 +37,11 @@ class ExternalForce:
        and a multiplier that multiplies such vector.
     """
     # Pre-store basic forces
+    # DOWN = get_tensor([0, 0, 1])
+    # RIGHT = get_tensor([0, 1, 0])
+    # ROT = get_tensor([1, 0, 0])
+    # ZEROS = get_tensor([0, 0, 0])
+
     DOWN = get_tensor([0, 0, 1])
     RIGHT = get_tensor([0, 1, 0])
     ROT = get_tensor([1, 0, 0])

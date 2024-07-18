@@ -167,6 +167,7 @@ def plot(y_axis, x_axis=None):
 def get_instance(mod, class_id):
     """Checks if class_id is a string and if so loads class from module;
         else, just instantiates the class."""
+
     if isinstance(class_id, str):
         # Get by name if string
         return getattr(mod, class_id)()

@@ -34,7 +34,7 @@ class World3D(World):
                  contact_callback=Defaults3D.CONTACT, eps=Defaults3D.EPSILON,
                  tol=Defaults3D.TOL, fric_dirs=Defaults3D.FRIC_DIRS,
                  post_stab=Defaults3D.POST_STABILIZATION, strict_no_penetration=True, time_of_contact_diff=True,
-                 stop_contact_grad=False, stop_friction_grad=False, detach_contact_b2=False):
+                 stop_contact_grad=False, stop_friction_grad=False, detach_contact_b2=False, configs = None):
         contact_callback_id = get_instance(contacts_module, contact_callback).__class__
         self.detach_contact_b2 = detach_contact_b2
         super().__init__(bodies, constraints=constraints, dt=dt, engine=engine,
@@ -42,7 +42,7 @@ class World3D(World):
                          tol=tol, fric_dirs=fric_dirs,
                          post_stab=post_stab, strict_no_penetration=strict_no_penetration,
                          time_of_contact_diff=time_of_contact_diff, stop_contact_grad=stop_contact_grad,
-                         stop_friction_grad=stop_friction_grad)
+                         stop_friction_grad=stop_friction_grad, configs = configs)
         self.static_inverse = False
 
     def M(self):

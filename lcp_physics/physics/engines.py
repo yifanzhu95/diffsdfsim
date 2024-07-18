@@ -35,6 +35,7 @@ class PdipmEngine(Engine):
 
         f = world.apply_forces(t)
         u = torch.matmul(world.M(), world.get_v()) + dt * f
+        u = u.float()
         if neq > 0:
             u = torch.cat([u, u.new_zeros(neq)])
         if not world.contacts:
@@ -76,8 +77,27 @@ class PdipmEngine(Engine):
             F[:, -mu.size(1):, :mu.size(2)] = mu
             F[:, -mu.size(1):, mu.size(2):mu.size(2) + E.size(1)] = \
                 -E.transpose(1, 2)
-            h = torch.cat([v, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
-
+            from icecream import ic
+            # Calculate penetration depths and update h
+            penetration_depths = []
+            for contact in world.contacts:
+                penetration_depths.append(contact[0][3])
+            penetration_depths = torch.cat(penetration_depths).unsqueeze(0).to(v.device).float()
+            #world.penetration_depths = penetration_depths
+            #world.penetration_depths.retain_grad()
+            #ic(world)
+            #ic(world.penetration_depths)
+            # ic(penetration_depths)
+            #ic(len(world.contacts))
+            # ic(v.dtype, penetration_depths.dtype, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1)).dtype)
+            # exit()
+            # ic(self.max_iter, world.configs)
+            C = world.configs['stabilization_coeff']
+            #ic(penetration_depths, torch.max(penetration_depths))
+            h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
+            
+            #world.h = h
+            #ic(M.shape, u.shape, G.shape, h.shape, Je.shape, b.shape, F.shape)
             x = -self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
         new_v = x[:world.vec_len * len(world.bodies)].squeeze(0)
         return new_v

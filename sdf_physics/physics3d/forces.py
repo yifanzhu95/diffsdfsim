@@ -51,12 +51,23 @@ class ExternalForce3D(ExternalForce):
        and a multiplier that multiplies such vector.
     """
     # Pre-store basic forces
-    UP = get_tensor([0, 0, 0, 0, 1, 0])
-    DOWN = get_tensor([0, 0, 0, 0, -1, 0])
+    # UP = get_tensor([0, 0, 0, 0, 1, 0])
+    # DOWN = get_tensor([0, 0, 0, 0, -1, 0])
+    # RIGHT = get_tensor([0, 0, 0, 1, 0, 0])
+    # LEFT = get_tensor([0, 0, 0, -1, 0, 0])
+    # FRONT = get_tensor([0, 0, 0, 0, 0,  1])
+    # BACK = get_tensor([0, 0, 0, 0, 0, -1])
+    # ROTX = get_tensor([1, 0, 0, 0, 0, 0])
+    # ROTY = get_tensor([0, 1, 0, 0, 0, 0])
+    # ROTZ = get_tensor([0, 0, 1, 0, 0, 0])
+    # ZEROS = get_tensor([0, 0, 0, 0, 0, 0])
+
+    UP = get_tensor([0, 0, 0, 0, 0, 1])
+    DOWN = get_tensor([0, 0, 0, 0, 0, -1])
     RIGHT = get_tensor([0, 0, 0, 1, 0, 0])
     LEFT = get_tensor([0, 0, 0, -1, 0, 0])
-    FRONT = get_tensor([0, 0, 0, 0, 0,  1])
-    BACK = get_tensor([0, 0, 0, 0, 0, -1])
+    FRONT = get_tensor([0, 0, 0, 0, 1,  0])
+    BACK = get_tensor([0, 0, 0, 0, -1, 0])
     ROTX = get_tensor([1, 0, 0, 0, 0, 0])
     ROTY = get_tensor([0, 1, 0, 0, 0, 0])
     ROTZ = get_tensor([0, 0, 1, 0, 0, 0])
