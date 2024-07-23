@@ -20,6 +20,7 @@ from diffworld.diffsdfsim.lcp_physics.physics.contacts import ContactHandler, Od
 from pytorch3d.transforms import quaternion_apply, quaternion_invert, quaternion_multiply
 from scipy.spatial.qhull import ConvexHull, QhullError
 from pykeops.torch import LazyTensor
+from torch.nn.functional import normalize
 import time
 from .bodies import SDF3D, Body3D
 from .utils import Defaults3D
@@ -334,6 +335,7 @@ class SDFGSDiffContactHandler(ContactHandler):
 
         if geom1 in geom2.no_contact:
             return
+        
         world = args[0]
 
         b1 = world.bodies[geom1.body]
@@ -366,9 +368,6 @@ class SDFGSDiffContactHandler(ContactHandler):
                 gs_body = b1
                 gs_index = 1
 
-        #TODO cluster contact points 
-        # GS pts are all in global frame
-
         # GS xyz point position in sdf frame, scaled
         xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.get_gs() - sdf_body.pos)*sdf_body.scale_tensor
         padding = world.configs['sdf_collision_detection_padding']
@@ -390,16 +389,12 @@ class SDFGSDiffContactHandler(ContactHandler):
         BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,2] < (1 + padding))
         BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,2] > (-1 - padding))
         
-        #ic(xyz_sdf_frame[-3:])
-    
+ 
         xyz_sdf_frame = xyz_sdf_frame[BB_mask]
-        #ic(xyz_sdf_frame[-3:])
         sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame)
-        #ic(sdfs[-3:])
-        #ic(sdfs)
+        normals = normalize(normals, dim=1)
         sdfs = sdfs/sdf_body.scale_tensor
         contact_mask = (sdfs <= world.eps)[:,0]
-        #ic(sdfs[contact_mask])
         sdfs = sdfs[contact_mask]
         normals = normals[contact_mask]
         xyz_sdf_frame = xyz_sdf_frame[contact_mask]
@@ -409,7 +404,7 @@ class SDFGSDiffContactHandler(ContactHandler):
             sdf_pts = (gs_body.get_gs()[BB_mask])[contact_mask]  - sdf_body.pos
         else:
             grid_origin = torch.min(xyz_sdf_frame, axis = 0)[0]
-            grid_size = world.configs['grid_size']*sdf_body.scale
+            grid_size = world.configs['grid_size']*sdf_body.scale_tensor
 
             side_sizes = torch.max(xyz_sdf_frame, axis = 0)[0] - grid_origin
             voxels = torch.ceil(side_sizes/grid_size)
@@ -424,13 +419,11 @@ class SDFGSDiffContactHandler(ContactHandler):
             for i in range(voxels[0]):
                 for j in range(voxels[1]):
                     for k in range(voxels[2]):
-                        
                         idx =np.where((xyz_copy == [i,j,k]).all(axis=1))[0]
                         if idx.size > 0:
                             indeces.append(idx[0])
             sdfs = sdfs[indeces]
             pens = -sdfs
-            #ic(pens[-1])
             normals = normals[indeces]
             gs_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[indeces] - gs_body.pos
             sdf_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[indeces]- sdf_body.pos
@@ -453,24 +446,14 @@ class SDFGSDiffContactHandler(ContactHandler):
             #     clusterred_pt_indeces.append(idx)
             # sdfs = sdfs[clusterred_pt_indeces]
             # pens = -sdfs
-            # ic(pens)
+            
+            #pens.retain_grad()
+            #world.pens = pens
+
             # normals = normals[clusterred_pt_indeces]
             # gs_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[clusterred_pt_indeces] - gs_body.pos
             # sdf_pts = ((gs_body.get_gs()[BB_mask])[contact_mask])[clusterred_pt_indeces]- sdf_body.pos
     
-        # ic(sdfs.shape, torch.max(sdfs), torch.min(sdfs))
-        # tmp = ((gs_body.get_gs()[BB_mask])[contact_mask])[clusterred_pt_indeces]
-        # tmp = tmp.cpu().detach().numpy()
-        # ic(tmp)
-        # import open3d as o3d
-        # mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
-        #     size=0.6, origin=[0,0,0])
-        # p= o3d.geometry.PointCloud()
-        # p.points = o3d.utility.Vector3dVector(tmp)
-        # o3d.visualization.draw_geometries([p, mesh_box, mesh_frame])
-        # exit()
-        # exit()
-        
         pts = []
         if sdf_index == 2:
             for normal, pt1, pt2, pen in zip(normals, gs_pts, sdf_pts, pens):
@@ -482,3 +465,15 @@ class SDFGSDiffContactHandler(ContactHandler):
 
         for p in pts:
             world.contacts.append((p, geom1.body, geom2.body))
+
+
+
+class SaPDiffContactHandler(ContactHandler):
+    """Differentiable contact handler, operations to calculate contact manifold
+    are done in autograd.
+    """
+    def __init__(self):
+        self.debug_callback = OdeContactHandler()
+
+    def __call__(self, args, geom1, geom2):
+        return

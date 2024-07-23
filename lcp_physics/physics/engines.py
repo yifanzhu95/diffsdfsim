@@ -22,7 +22,7 @@ class Engine:
 class PdipmEngine(Engine):
     """Engine that uses the primal dual interior point method LCP solver.
     """
-    def __init__(self, max_iter=10):
+    def __init__(self, max_iter=15):
         self.lcp_solver = LCPFunction
         self.cached_inverse = None
         self.max_iter = max_iter
@@ -73,18 +73,27 @@ class PdipmEngine(Engine):
             G = torch.cat([Jc, Jf,
                            Jf.new_zeros(Jf.size(0), mu.size(1), Jf.size(2))], dim=1)
             F = G.new_zeros(G.size(1), G.size(1)).unsqueeze(0)
+
             F[:, Jc.size(1):-E.size(2), -E.size(2):] = E
             F[:, -mu.size(1):, :mu.size(2)] = mu
             F[:, -mu.size(1):, mu.size(2):mu.size(2) + E.size(1)] = \
                 -E.transpose(1, 2)
-            from icecream import ic
+
+            # # Start with creating F as before
+            # F = G.new_zeros(G.size(1), G.size(1)).unsqueeze(0)
+            # # Create a new tensor for each operation
+            # F1 = torch.cat([F[:,Jc.size(1):-E.size(2), :-E.size(2)], E], axis = 2)
+            # F2 = torch.cat([mu, -E.transpose(1,2), F[:,-mu.size(1):,:mu.size(2)]], axis = 2)
+            # F3 = torch.cat([F[:, :Jc.size(1) ,:], F1, F2], axis =1)
+
             # Calculate penetration depths and update h
             penetration_depths = []
             for contact in world.contacts:
                 penetration_depths.append(contact[0][3])
             penetration_depths = torch.cat(penetration_depths).unsqueeze(0).to(v.device).float()
-            #world.penetration_depths = penetration_depths
-            #world.penetration_depths.retain_grad()
+            # world.penetration_depths = penetration_depths
+            # world.penetration_depths.retain_grad()
+
             #ic(world)
             #ic(world.penetration_depths)
             # ic(penetration_depths)
@@ -92,11 +101,12 @@ class PdipmEngine(Engine):
             # ic(v.dtype, penetration_depths.dtype, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1)).dtype)
             # exit()
             # ic(self.max_iter, world.configs)
+
             C = world.configs['stabilization_coeff']
-            #ic(penetration_depths, torch.max(penetration_depths))
             h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
             
-            #world.h = h
+            # world.h = h
+            # world.h.retain_grad()
             #ic(M.shape, u.shape, G.shape, h.shape, Je.shape, b.shape, F.shape)
             x = -self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
         new_v = x[:world.vec_len * len(world.bodies)].squeeze(0)

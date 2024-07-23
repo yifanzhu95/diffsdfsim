@@ -52,7 +52,7 @@ class Defaults3D(Defaults):
     # Default simulation parameters
     FRIC_DIRS = 8
 
-    CONTACT = 'SDFGSDiffContactHandler' #"FWContactHandler"
+    CONTACT = 'SDFGSDiffContactHandler' #'SaPDiffContactHandler' # #"FWContactHandler"
 
     # Whether to use custom meshes/inertia tensors for analytic shapes
     CUSTOM_MESH = False

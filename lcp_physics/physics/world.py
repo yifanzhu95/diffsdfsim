@@ -67,11 +67,10 @@ class World:
         self.observations = []
 
         # XXX Using ODE for broadphase for now
-        self.space = ode.HashSpace()
+        self.space = ode.HashSpace()       
         for i, b in enumerate(bodies):
             b.geom.body = i
             self.space.add(b.geom)
-
         self.static_inverse = True
         self.num_constraints = 0
         self.joints = []
@@ -249,11 +248,6 @@ class World:
         #       larger accelerations when timesteps get smaller and that can become problematic.
         start_v = self.v
         start_contacts = self.contacts
-        # from icecream import ic
-        # ic(len(self.contacts))
-        # for i in range(10):
-        #     ic(self.contacts[i])
-        #ic(self.contacts[0], self.contacts[1].ID, self.contacts[2].ID)
         while True:
 
             dt_ = dt
@@ -315,17 +309,17 @@ class World:
                     rot2 = torch.stack([rotation_matrix(-dt_ * v[0]) for v in vs2])
                     rots1_mat = rotation_matrix(rots1)
                     rots2_mat = rotation_matrix(rots2)
-                rots1_mat = rot1 @ rots1_mat
-                rots2_mat = rot2 @ rots2_mat
+                rots1_mat = rot1 @ rots1_mat.float()
+                rots2_mat = rot2 @ rots2_mat.float()
 
                 # determine contact points in body frames before time step
                 # contact points are input with rotation in world frame but position relative to body frame origin (in world coordinates)
-                cs1 = (rots1_mat.transpose(1, 2) @ cs1.unsqueeze(2)).squeeze(2)
-                cs2 = (rots2_mat.transpose(1, 2) @ cs2.unsqueeze(2)).squeeze(2)
+                cs1 = (rots1_mat.transpose(1, 2) @ cs1.unsqueeze(2).float()).squeeze(2)
+                cs2 = (rots2_mat.transpose(1, 2) @ cs2.unsqueeze(2).float()).squeeze(2)
 
                 # determine contact normal in body frame of shape 2
                 # contact normal is input in world frame coordinates
-                ns2 = (rots2_mat.transpose(1, 2) @ ns.unsqueeze(2)).squeeze(2)
+                ns2 = (rots2_mat.transpose(1, 2) @ ns.unsqueeze(2).float()).squeeze(2)
 
 
                 # "Recompute" dt with gradients for contact points

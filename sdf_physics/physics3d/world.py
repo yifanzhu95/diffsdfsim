@@ -66,7 +66,6 @@ class World3D(World):
             J2 = -torch.cat([torch.cross(c[2], c[0]), c[0]])
             Jc[i, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
             Jc[i, i2 * self.vec_len:(i2 + 1) * self.vec_len] = J2
-
         return Jc
 
     def Jf(self):
