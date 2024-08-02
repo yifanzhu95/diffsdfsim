@@ -333,8 +333,8 @@ class SDFGSDiffContactHandler(ContactHandler):
         # p1 and p2 are contact points on b1 and b2 relative to b1 and b2, in global frame
         # pen (>0) is the pen depth of b1's points in b2, negates dist
 
-        if geom1 in geom2.no_contact:
-            return
+        # if geom1 in geom2.no_contact:
+        #     return
         
         world = args[0]
 
@@ -369,7 +369,7 @@ class SDFGSDiffContactHandler(ContactHandler):
                 gs_index = 1
 
         # GS xyz point position in sdf frame, scaled
-        xyz_sdf_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.get_gs() - sdf_body.pos)*sdf_body.scale_tensor
+        xyz_sap_frame = quaternion_apply(quaternion_invert(sdf_body.rot), gs_body.get_gs() - sdf_body.pos)*sdf_body.scale_tensor
         padding = world.configs['sdf_collision_detection_padding']
 
         # import open3d as o3d
@@ -383,33 +383,33 @@ class SDFGSDiffContactHandler(ContactHandler):
         # p.points = o3d.utility.Vector3dVector(tmp)
         # o3d.visualization.draw_geometries([p, mesh_box, mesh_frame])
         
-        BB_mask = torch.logical_and(xyz_sdf_frame[:,0] < (1 + padding), xyz_sdf_frame[:,0] > (-1 - padding))
-        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,1] < (1 + padding))
-        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,1] > (-1 - padding))
-        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,2] < (1 + padding))
-        BB_mask = torch.logical_and(BB_mask,xyz_sdf_frame[:,2] > (-1 - padding))
+        BB_mask = torch.logical_and(xyz_sap_frame[:,0] < (1 + padding), xyz_sap_frame[:,0] > (-1 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,1] < (1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,1] > (-1 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,2] < (1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,2] > (-1 - padding))
         
  
-        xyz_sdf_frame = xyz_sdf_frame[BB_mask]
-        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sdf_frame)
+        xyz_sap_frame = xyz_sap_frame[BB_mask]
+        sdfs, normals = sdf_body.sdf.forward_torch(xyz_sap_frame)
         normals = normalize(normals, dim=1)
         sdfs = sdfs/sdf_body.scale_tensor
         contact_mask = (sdfs <= world.eps)[:,0]
         sdfs = sdfs[contact_mask]
         normals = normals[contact_mask]
-        xyz_sdf_frame = xyz_sdf_frame[contact_mask]
+        xyz_sap_frame = xyz_sap_frame[contact_mask]
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs
             gs_pts = (gs_body.get_gs()[BB_mask])[contact_mask] - gs_body.pos
             sdf_pts = (gs_body.get_gs()[BB_mask])[contact_mask]  - sdf_body.pos
         else:
-            grid_origin = torch.min(xyz_sdf_frame, axis = 0)[0]
+            grid_origin = torch.min(xyz_sap_frame, axis = 0)[0]
             grid_size = world.configs['grid_size']*sdf_body.scale_tensor
 
-            side_sizes = torch.max(xyz_sdf_frame, axis = 0)[0] - grid_origin
+            side_sizes = torch.max(xyz_sap_frame, axis = 0)[0] - grid_origin
             voxels = torch.ceil(side_sizes/grid_size)
             indeces = []
-            xyz_copy = xyz_sdf_frame.clone() - grid_origin
+            xyz_copy = xyz_sap_frame.clone() - grid_origin
             xyz_copy /= side_sizes
             xyz_copy *= voxels
             xyz_copy = torch.ceil(xyz_copy)
@@ -466,8 +466,6 @@ class SDFGSDiffContactHandler(ContactHandler):
         for p in pts:
             world.contacts.append((p, geom1.body, geom2.body))
 
-
-
 class SaPDiffContactHandler(ContactHandler):
     """Differentiable contact handler, operations to calculate contact manifold
     are done in autograd.
@@ -476,4 +474,104 @@ class SaPDiffContactHandler(ContactHandler):
         self.debug_callback = OdeContactHandler()
 
     def __call__(self, args, geom1, geom2):
+        ## Is this needed
+        # if geom1 in geom2.no_contact:
+        #     return
+        
+        world = args[0]
+
+        b1 = world.bodies[geom1.body]
+        b2 = world.bodies[geom2.body]
+
+        types = [b1.type, b2.type]
+        if 'obj' not in types:
+            return 
+
+        if 'robot' in types and 'obj' in types:
+            ## TODO implement robot primitive geometry collision handling
+            return
+
+        if b1.type == 'obj' and b2.type == 'obj':
+            sap_body = b1
+            sap_index = 1
+            other_body = b2
+            other_index = 2
+
+        if 'obj' in types and 'terrain' in types:
+            if b1.type == 'obj':
+                sap_body = b1
+                sap_index = 1
+                other_body = b2
+                other_index = 2
+            else:
+                sap_body = b2
+                sap_index = 2
+                other_body = b1
+                other_index = 1
+
+        # GS xyz point position in sdf frame, scaled
+        xyz_sap_frame = quaternion_apply(quaternion_invert(sap_body.rot), other_body.get_xyz() - sap_body.pos)*sap_body.sap_scale \
+                        - sap_body.sap_offset
+        padding = world.configs['collision_detection_padding']
+
+        # import open3d as o3d
+        # mesh_box = o3d.geometry.TriangleMesh.create_box(width=0.1,
+        #                                         height=0.2,
+        #                                         depth=0.1).translate((-0.05,-0.1, 0.01))
+        # mesh_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(
+        #     size=0.6, origin=[0,0,0])
+        # p= o3d.geometry.PointCloud()
+        # tmp = gs_body.get_gs().cpu().detach().numpy()
+        # p.points = o3d.utility.Vector3dVector(tmp)
+        # o3d.visualization.draw_geometries([p, mesh_box, mesh_frame])
+        
+        # sap is [0, 1)
+        BB_mask = torch.logical_and(xyz_sap_frame[:,0] < (1 + padding), xyz_sap_frame[:,0] > (0 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,1] < (1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,1] > (0 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,2] < (1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz_sap_frame[:,2] > (0 - padding))
+        
+        xyz_sap_frame = xyz_sap_frame[BB_mask]
+        psr_grid = sap_body.psr_grid.squeeze().squeeze()
+        psr_normal =  sap_body.psr_normal.squeeze().squeeze()
+
+        xyz_sap_grid = torch.floor(xyz_sap_frame.clone()*world.configs['SaP_grid_res']).to(torch.int).cpu()
+        # only use one point in each grid
+        unique_rows, unique_mask, counts = torch.unique(
+            xyz_sap_grid, 
+            dim=0, 
+            return_inverse=True, 
+            return_counts=True
+        )
+        xyz_sap_frame = xyz_sap_frame[unique_mask]
+        xyz_sap_grid = xyz_sap_grid[unique_mask]
+
+        sdfs = psr_grid[xyz_sap_grid[:,0], xyz_sap_grid[:,1], xyz_sap_grid[:,2]].unsqueeze(-1) #unitless sdfs
+        normals = psr_normal[xyz_sap_grid[:,0], xyz_sap_grid[:,1], xyz_sap_grid[:,2], :]
+        sdfs = sdfs/sap_body.sap_scale
+        contact_mask = (sdfs <= world.eps)[:,0].cpu()
+
+        #contact_mask = (sdfs <= 0)[:,0]
+        sdfs = sdfs[contact_mask]
+        normals = normals[contact_mask]
+        xyz_sap_frame = xyz_sap_frame[contact_mask]
+        pens = -sdfs
+
+        other_pts = (((other_body.get_xyz()[BB_mask]))[unique_mask])[contact_mask]- other_body.pos
+        sap_pts = (((other_body.get_xyz()[BB_mask]))[unique_mask])[contact_mask] - sap_body.pos
+
+        pts = []
+        if sap_index == 2:
+            for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
+                pts.append((normal, pt1, pt2, pen))
+        elif sap_index == 1:
+            normals *= -1 
+            for normal, pt1, pt2, pen in zip(normals, sap_pts, other_pts, pens):
+                pts.append((normal, pt1, pt2, pen))
+
+        for p in pts:
+            world.contacts.append((p, geom1.body, geom2.body))
+
+
         return
