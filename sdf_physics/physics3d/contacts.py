@@ -17,6 +17,7 @@
 #
 import torch
 from diffworld.diffsdfsim.lcp_physics.physics.contacts import ContactHandler, OdeContactHandler
+from diffworld.utils import triangle_point_distance_and_normal_batched
 from pytorch3d.transforms import quaternion_apply, quaternion_invert, quaternion_multiply
 from scipy.spatial.qhull import ConvexHull, QhullError
 from pykeops.torch import LazyTensor
@@ -26,6 +27,8 @@ from .bodies import SDF3D, Body3D
 from .utils import Defaults3D
 from icecream import ic
 import numpy as np
+import trimesh
+
 def KMeans(x, K=10, Niter=10, verbose=False):
     """Implements Lloyd's algorithm for the Euclidean metric."""
     start = time.time()
@@ -557,10 +560,9 @@ class SaPDiffContactHandler(ContactHandler):
         normals = normals[contact_mask]
         xyz_sap_frame = xyz_sap_frame[contact_mask]
         pens = -sdfs
-
         other_pts = (((other_body.get_xyz()[BB_mask]))[unique_mask])[contact_mask]- other_body.pos
         sap_pts = (((other_body.get_xyz()[BB_mask]))[unique_mask])[contact_mask] - sap_body.pos
-
+        #print(pens)
         pts = []
         if sap_index == 2:
             for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
@@ -574,4 +576,99 @@ class SaPDiffContactHandler(ContactHandler):
             world.contacts.append((p, geom1.body, geom2.body))
 
 
+        return
+    
+
+class SaPMeshDiffContactHandler(ContactHandler):
+    """Differentiable contact handler, operations to calculate contact manifold
+    are done in autograd.
+    """
+    def __init__(self):
+        self.debug_callback = OdeContactHandler()
+
+    def __call__(self, args, geom1, geom2):
+        world = args[0]
+
+        b1 = world.bodies[geom1.body]
+        b2 = world.bodies[geom2.body]
+
+        types = [b1.type, b2.type]
+
+        if 'obj' not in types:
+            return 
+
+        if 'robot' in types and 'obj' in types:
+            ## TODO implement robot primitive geometry collision handling
+            return
+
+        if b1.type == 'obj' and b2.type == 'obj':
+            sap_body = b1
+            sap_index = 1
+            other_body = b2
+            other_index = 2
+
+        if 'obj' in types and 'terrain' in types:
+            if b1.type == 'obj':
+                sap_body = b1
+                sap_index = 1
+                other_body = b2
+                other_index = 2
+            else:
+                sap_body = b2
+                sap_index = 2
+                other_body = b1
+                other_index = 1
+
+        # GS xyz point position in sdf frame, scaled
+        xyz = other_body.get_xyz()
+        padding = world.configs['collision_detection_padding']
+        obj_scale = sap_body.scale_tensor
+        # sap is [0, 1)
+        BB_mask = torch.logical_and(xyz[:,0] < 1/obj_scale*(1 + padding), xyz[:,0] > 1/obj_scale*(-1 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz[:,1] < 1/obj_scale*(1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz[:,1] > 1/obj_scale*(-1 - padding))
+        BB_mask = torch.logical_and(BB_mask,xyz[:,2] < 1/obj_scale*(1 + padding))
+        BB_mask = torch.logical_and(BB_mask,xyz[:,2] > 1/obj_scale*(-1 - padding))
+        
+        xyz = xyz[BB_mask]
+        (v,f,n) = sap_body.mesh_world
+        f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
+        v_numpy = v.squeeze(0).detach().cpu().numpy()
+        xyz_numpy = xyz.detach().cpu().numpy()
+        trimesh_mesh = trimesh.Trimesh(vertices=v_numpy, faces=f_numpy)
+        signed_distances = trimesh.proximity.signed_distance(trimesh_mesh, xyz_numpy)
+        closest_points, distances, face_indices = trimesh.proximity.closest_point(trimesh_mesh, xyz_numpy)
+        pt_indeces = f_numpy[face_indices, :]
+        verteces = v[0,pt_indeces,:]
+        normals = n[0,pt_indeces,:]
+        _, normals, torch_dist, isnan = triangle_point_distance_and_normal_batched(
+                xyz,\
+                verteces.float(), \
+                normals.float())
+        signs = torch.from_numpy(np.sign(signed_distances)*-1).to(xyz.device)
+        sdfs = torch_dist*signs
+        contact_mask = (sdfs <= world.eps).cpu()
+        contact_mask = contact_mask & ~isnan.cpu()
+        #contact_mask = (sdfs <= 0)[:,0]
+        sdfs = sdfs[contact_mask]
+        
+        normals = normals[contact_mask]
+        xyz= xyz[contact_mask]
+        pens = -sdfs.unsqueeze(-1)
+        #TODO can do contact clustering
+        
+        # TODO: handle rotation
+        other_pts = (other_body.get_xyz()[BB_mask])[contact_mask]- other_body.pos
+        sap_pts = (other_body.get_xyz()[BB_mask])[contact_mask] - sap_body.pos
+        pts = []
+        if sap_index == 2:
+            for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
+                pts.append((normal, pt1, pt2, pen))
+        elif sap_index == 1:
+            normals *= -1 
+            for normal, pt1, pt2, pen in zip(normals, sap_pts, other_pts, pens):
+                pts.append((normal, pt1, pt2, pen))
+
+        for p in pts:
+            world.contacts.append((p, geom1.body, geom2.body))
         return

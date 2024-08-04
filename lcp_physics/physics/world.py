@@ -168,10 +168,8 @@ class World:
             posjh = poss2 + h * vs2[:, -poss1.shape[1]:] + 0.5 * as2[:, -poss1.shape[1]:] * h * h
 
             cih_in_w = Rih @ cs1.unsqueeze(2) + posih.unsqueeze(2)
-
-            cih_in_j = (Rjh.transpose(1, 2) @ (cih_in_w - posjh.unsqueeze(2) )).squeeze(2)
-
-            return (ns2.unsqueeze(1) @ (cs2 - cih_in_j).unsqueeze(2)).squeeze(2)
+            cih_in_j = (Rjh.transpose(1, 2).double() @ (cih_in_w - posjh.unsqueeze(2) )).squeeze(2)
+            return (ns2.unsqueeze(1).double() @ (cs2.double() - cih_in_j).unsqueeze(2)).squeeze(2)
 
 
         @staticmethod
