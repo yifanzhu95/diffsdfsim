@@ -598,26 +598,29 @@ class SaPMeshDiffContactHandler(ContactHandler):
             return 
 
         if 'robot' in types and 'obj' in types:
-            ## TODO implement robot primitive geometry collision handling
-            return
+            if b1.type == 'obj':
+                sap_body = b1
+                sap_index = 1
+                other_body = b2
+            else:
+                sap_body = b2
+                sap_index = 2
+                other_body = b1
 
         if b1.type == 'obj' and b2.type == 'obj':
             sap_body = b1
             sap_index = 1
             other_body = b2
-            other_index = 2
 
         if 'obj' in types and 'terrain' in types:
             if b1.type == 'obj':
                 sap_body = b1
                 sap_index = 1
                 other_body = b2
-                other_index = 2
             else:
                 sap_body = b2
                 sap_index = 2
                 other_body = b1
-                other_index = 1
 
         # GS xyz point position in sdf frame, scaled
         xyz = other_body.get_xyz()
@@ -656,7 +659,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         xyz= xyz[contact_mask]
         pens = -sdfs.unsqueeze(-1)
         #TODO can do contact clustering
-        
+        ic(torch.max(pens))
         # TODO: handle rotation
         other_pts = (other_body.get_xyz()[BB_mask])[contact_mask]- other_body.pos
         sap_pts = (other_body.get_xyz()[BB_mask])[contact_mask] - sap_body.pos
