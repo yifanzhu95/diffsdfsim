@@ -634,6 +634,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
         BB_mask = torch.logical_and(BB_mask,xyz[:,2] > 1/obj_scale*(-1 - padding))
         
         xyz = xyz[BB_mask]
+        if len(xyz) < 1:
+            return
         (v,f,n) = sap_body.mesh_world
         f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
         v_numpy = v.squeeze(0).detach().cpu().numpy()
@@ -659,7 +661,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         xyz= xyz[contact_mask]
         pens = -sdfs.unsqueeze(-1)
         #TODO can do contact clustering
-        ic(torch.max(pens))
+        # ic(torch.max(pens))
         # TODO: handle rotation
         other_pts = (other_body.get_xyz()[BB_mask])[contact_mask]- other_body.pos
         sap_pts = (other_body.get_xyz()[BB_mask])[contact_mask] - sap_body.pos

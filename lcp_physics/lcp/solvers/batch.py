@@ -432,7 +432,7 @@ a non-zero diagonal.
     # for more details.
 
     try:
-        G_invQ_GT = torch.bmm(G, G.transpose(1, 2).lu_solve(*Q_LU)) + F
+        G_invQ_GT = torch.bmm(G, G.transpose(1, 2).lu_solve(*Q_LU)) + F        
     except RuntimeError as err:
         # FIXME: Temporary bugfix for https://github.com/pytorch/pytorch/issues/36921
         if G.shape[0] == 1:

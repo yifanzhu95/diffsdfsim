@@ -257,6 +257,11 @@ class World:
                 dt_ = -self.last_dt + dt_joint
 
             new_v = self.engine.solve_dynamics(self, dt_)
+            #to comply with pybullet integration scheme 
+            #x = x + v*dt
+            #v = v + 0.5*a*dt
+            new_v = start_v + (new_v - start_v)/2
+
             self.set_v(new_v)
             # try step with current dt
 
@@ -368,7 +373,6 @@ class World:
             self.set_v(tmp_v)
 
             self.find_contacts()  # XXX Necessary to recheck contacts?
-
         # store this step in a trajectory
         curr_p = torch.cat([b.p for b in self.bodies])
         curr_v = self.v
@@ -377,6 +381,7 @@ class World:
         self.trajectory.append( ( self.t, curr_p, curr_v, curr_contacts, curr_rot_joints ) )
 
         self.t += dt
+        
 
     def get_v(self):
         return self.v
@@ -486,8 +491,9 @@ class World:
         for i, contacts in enumerate(self.contacts):
             i1 = contacts[1]
             i2 = contacts[2]
-            # mu[i] = torch.sqrt(self.bodies[i1].fric_coeff * self.bodies[i2].fric_coeff)
-            mu[i] = 0.5 * (self.bodies[i1].fric_coeff + self.bodies[i2].fric_coeff)
+            #mu[i] = torch.sqrt(self.bodies[i1].fric_coeff * self.bodies[i2].fric_coeff)
+            #mu[i] = 0.5 * (self.bodies[i1].fric_coeff + self.bodies[i2].fric_coeff)
+            mu[i] = self.bodies[i1].fric_coeff * self.bodies[i2].fric_coeff #pybullet convention
         return torch.diag(mu)
 
     def E(self):

@@ -82,7 +82,7 @@ class Gravity3D(ExternalForce3D):
        magnitude body.mass * g.
     """
 
-    def __init__(self, g=10.0):
+    def __init__(self, g=9.82):
         self.multiplier = g
         self.body = None
         self.cached_force = None
