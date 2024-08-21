@@ -419,9 +419,10 @@ class World:
     def Je(self):
         Je = self._M.new_zeros(self.num_constraints,
                                self.vec_len * len(self.bodies))
+        B = self._M.new_zeros(self.num_constraints)
         row = 0
         for joint in self.joints:
-            J1, J2 = joint[0].J()
+            J1, J2, b = joint[0].J()
             i1 = joint[1]
             i2 = joint[2]
             Je[row:row + J1.size(0),
@@ -429,8 +430,9 @@ class World:
             if J2 is not None:
                 Je[row:row + J2.size(0),
                 i2 * self.vec_len:(i2 + 1) * self.vec_len] = J2
+            B[row:row + J1.size(0)] = b
             row += J1.size(0)
-        return Je
+        return Je, B
 
     def Jc(self):
         Jc = self._M.new_zeros(len(self.contacts), self.vec_len * len(self.bodies))

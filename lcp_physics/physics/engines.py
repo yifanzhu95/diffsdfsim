@@ -30,14 +30,14 @@ class PdipmEngine(Engine):
     # @profile
     def solve_dynamics(self, world, dt):
         t = world.t
-        Je = world.Je()
+        Je, B = world.Je()
         neq = Je.size(0) if Je.ndimension() > 0 else 0
-
         f = world.apply_forces(t)
         u = torch.matmul(world.M(), world.get_v()) + dt * f
         u = u.float()
         if neq > 0:
-            u = torch.cat([u, u.new_zeros(neq)])
+            u = torch.cat([u, B])
+            #u = torch.cat([u, u.new_zeros(neq)])
         if not world.contacts:
             # No contact constraints, no complementarity conditions
             if neq > 0:
@@ -53,14 +53,17 @@ class PdipmEngine(Engine):
             else:
                 inv = self.cached_inverse
             x = torch.matmul(inv, u)  # Kline Eq. 2.41
+            fc = None
         else:
             # Solve Mixed LCP (Kline 2.7.2)
             Jc = world.Jc()
             v = torch.matmul(Jc, world.get_v()) * world.restitutions()
             M = world.M().unsqueeze(0)
             if neq > 0:
-                b = Je.new_zeros(Je.size(0)).unsqueeze(0)
+                b = B.unsqueeze(0)
                 Je = Je.unsqueeze(0)
+                # b = Je.new_zeros(Je.size(0)).unsqueeze(0)
+                # Je = Je.unsqueeze(0)
             else:
                 b = torch.tensor([])
                 Je = torch.tensor([])
@@ -111,9 +114,9 @@ class PdipmEngine(Engine):
             # world.h = h
             # world.h.retain_grad()
             #ic(M.shape, u.shape, G.shape, h.shape, Je.shape, b.shape, F.shape)
-            x = -self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
+            x, fc = -self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
         new_v = x[:world.vec_len * len(world.bodies)].squeeze(0)
-        return new_v
+        return new_v, fc
 
     def post_stabilization(self, world):
         v = world.get_v()

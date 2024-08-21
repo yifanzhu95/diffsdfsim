@@ -636,12 +636,14 @@ class SaPMeshDiffContactHandler(ContactHandler):
         xyz = xyz[BB_mask]
         if len(xyz) < 1:
             return
+        
         (v,f,n) = sap_body.mesh_world
         f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
         v_numpy = v.squeeze(0).detach().cpu().numpy()
         xyz_numpy = xyz.detach().cpu().numpy()
         trimesh_mesh = trimesh.Trimesh(vertices=v_numpy, faces=f_numpy)
         signed_distances = trimesh.proximity.signed_distance(trimesh_mesh, xyz_numpy)
+
         closest_points, distances, face_indices = trimesh.proximity.closest_point(trimesh_mesh, xyz_numpy)
         pt_indeces = f_numpy[face_indices, :]
         verteces = v[0,pt_indeces,:]
@@ -656,12 +658,15 @@ class SaPMeshDiffContactHandler(ContactHandler):
         contact_mask = contact_mask & ~isnan.cpu()
         #contact_mask = (sdfs <= 0)[:,0]
         sdfs = sdfs[contact_mask]
-        
         normals = normals[contact_mask]
         xyz= xyz[contact_mask]
+
+        if len(xyz) < 1:
+            return
+
         pens = -sdfs.unsqueeze(-1)
         #TODO can do contact clustering
-        # ic(torch.max(pens))
+        #ic(torch.max(pens).cpu().detach().numpy(), len(pens))
         # TODO: handle rotation
         other_pts = (other_body.get_xyz()[BB_mask])[contact_mask]- other_body.pos
         sap_pts = (other_body.get_xyz()[BB_mask])[contact_mask] - sap_body.pos

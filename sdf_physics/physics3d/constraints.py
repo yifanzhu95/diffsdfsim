@@ -107,6 +107,34 @@ class XConstraint:
         pass
 
 
+class LinearVelConstraint:
+    """LinearVelConstraint
+    """
+    def __init__(self, body1, vel):
+        self.static = True
+        self.num_constraints = 3
+        self.body1 = body1
+        self.pos = body1.pos
+        self.rot1 = self.body1.p[0]
+        self.body2 = self.rot2 = None
+        self.vel = vel
+
+    def J(self):
+        J = self.pos.new_tensor([[0,0,0, 1, 0, 0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
+        b = self.pos.new_tensor(self.vel)
+        return J, None, b
+
+    def move(self, dt):
+        self.update_pos()
+
+    def update_pos(self):
+        self.pos = self.body1.pos
+        self.rot1 = self.body1.p[0]
+
+    def draw(self, screen, pixels_per_meter=1):
+        pos = (self.pos.detach().cpu().numpy() * pixels_per_meter).astype(int)
+        return [pygame.draw.line(screen, (0, 255, 0), pos - [0, 5], pos + [0, 5], 2)]
+
 class RotConstraint3D(RotConstraint):
     def __init__(self, body1):
         super().__init__(body1)
@@ -136,6 +164,11 @@ class TotalConstraint3D(TotalConstraint):
         self.rot1 = torch.stack([theta, phi])
         self.eye = torch.eye(self.num_constraints).type_as(self.pos)
 
+    def J(self):
+        J = self.eye
+        b = torch.zeros(6).type_as(self.pos)
+        return J, None, b
+
     def move(self, dt):
         self.rot1 = self.rot1 + self.body1.v[:2] * dt
         self.update_pos()
@@ -143,6 +176,8 @@ class TotalConstraint3D(TotalConstraint):
     def update_pos(self):
         self.pos1 = spherical_to_cart(self.r1, *self.rot1)
         self.pos = self.body1.pos + self.pos1
+
+    
 
 
 class GripperJoint:
