@@ -10,8 +10,8 @@ Based on: M. B. Cline, Rigid body simulation with contact and constraints, 2002
 
 import torch
 
-from diffworld.diffsdfsim.lcp_physics.lcp.lcp import LCPFunction
-
+from diffworld.diffsdfsim.lcp_physics.lcp.lcp import LCPFunction, LCPFunctionClass
+from icecream import ic
 
 class Engine:
     """Base class for stepping engine."""
@@ -22,8 +22,9 @@ class Engine:
 class PdipmEngine(Engine):
     """Engine that uses the primal dual interior point method LCP solver.
     """
-    def __init__(self, max_iter=15):
-        self.lcp_solver = LCPFunction
+    def __init__(self, max_iter=30):
+        #self.lcp_solver = LCPFunction
+        
         self.cached_inverse = None
         self.max_iter = max_iter
 
@@ -53,7 +54,7 @@ class PdipmEngine(Engine):
             else:
                 inv = self.cached_inverse
             x = torch.matmul(inv, u)  # Kline Eq. 2.41
-            fc = None
+            force = None
         else:
             # Solve Mixed LCP (Kline 2.7.2)
             Jc = world.Jc()
@@ -110,13 +111,18 @@ class PdipmEngine(Engine):
             copy[penetration_depths < world.configs['contact_eps']] = 0.
             penetration_depths = copy
             h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
-            
-            # world.h = h
-            # world.h.retain_grad()
-            #ic(M.shape, u.shape, G.shape, h.shape, Je.shape, b.shape, F.shape)
-            x, fc = -self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
+            #x =- self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
+            #ic(self.lcp_solver)
+            self.lcp_solver = LCPFunctionClass(max_iter=self.max_iter, verbose=-1)
+            x, lams, nus = self.lcp_solver.run(M, u, G, h, Je, b, F)
+            x = -x
+            #ic(x.shape, lams.shape, M.shape, G.shape, Je.shape, u.shape)
+            # contact + constraint force
+            force = -(u -  torch.bmm(M, x.unsqueeze(-1)).squeeze(-1))/dt
+            # contact force
+            #force = (-(u -  torch.bmm(M, x.unsqueeze(-1)).squeeze(-1)) - torch.bmm(torch.transpose(Je, 1,2), nus.unsqueeze(-1)).squeeze(-1))/dt
         new_v = x[:world.vec_len * len(world.bodies)].squeeze(0)
-        return new_v, fc
+        return new_v, force
 
     def post_stabilization(self, world):
         v = world.get_v()

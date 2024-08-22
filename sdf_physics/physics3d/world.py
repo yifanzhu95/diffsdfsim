@@ -68,6 +68,22 @@ class World3D(World):
             Jc[i, i2 * self.vec_len:(i2 + 1) * self.vec_len] = J2
         return Jc
 
+    def start_Jc(self):
+        Jc = self._M.new_zeros(len(self.start_contacts), self.vec_len * len(self.bodies))
+        for i, contact in enumerate(self.start_contacts):
+            if self.stop_contact_grad:
+                c = [c.detach() for c in contact[0]]
+            else:
+                c = contact[0]
+            i1 = contact[1]
+            i2 = contact[2]
+            J1 = torch.cat([torch.cross(c[1], c[0]), c[0]])
+            J2 = -torch.cat([torch.cross(c[2], c[0]), c[0]])
+            Jc[i, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
+            Jc[i, i2 * self.vec_len:(i2 + 1) * self.vec_len] = J2
+        return Jc
+
+
     def Jf(self):
 
         Jf = self._M.new_zeros(len(self.contacts) * self.fric_dirs,
@@ -98,6 +114,38 @@ class World3D(World):
             Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
             Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i2 * self.vec_len:(i2 + 1) * self.vec_len] = -J2
         return Jf
+
+    def start_Jf(self):
+
+        Jf = self._M.new_zeros(len(self.start_contacts) * self.fric_dirs,
+                               self.vec_len * len(self.bodies))
+        for i, contact in enumerate(self.start_contacts):
+            if self.stop_friction_grad:
+                c = [c.detach() for c in contact[0]]  # c = (normal, contact_pt_1, contact_pt_2)
+            else:
+                c = contact[0]
+            i1 = contact[1]  # body 1 index
+            i2 = contact[2]  # body 2 index
+
+            dir1 = normalize(orthogonal(c[0]), dim=0)
+            dir2 = normalize(torch.cross(dir1, c[0]), dim=0)
+            dirs = torch.stack([dir1, dir2])
+            if self.fric_dirs == 8:
+                dir3 = normalize(dir1 + dir2, dim=0)
+                dir4 = normalize(torch.cross(dir3, c[0]), dim=0)
+
+                dirs = torch.cat([dirs,
+                                  torch.stack([dir3, dir4])
+                                  ], dim=0)
+            dirs = torch.cat([dirs, -dirs], dim=0)
+
+            J1 = torch.cat([torch.cross(c[1].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+            J2 = torch.cat([torch.cross(c[2].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+
+            Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
+            Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i2 * self.vec_len:(i2 + 1) * self.vec_len] = -J2
+        return Jf
+
 
     def save_state(self):
         raise NotImplementedError

@@ -667,7 +667,6 @@ class SaPMeshDiffContactHandler(ContactHandler):
         pens = -sdfs.unsqueeze(-1)
         #TODO can do contact clustering
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens))
-        # TODO: handle rotation
         other_pts = (other_body.get_xyz()[BB_mask])[contact_mask]- other_body.pos
         sap_pts = (other_body.get_xyz()[BB_mask])[contact_mask] - sap_body.pos
         pts = []
@@ -681,4 +680,5 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         for p in pts:
             world.contacts.append((p, geom1.body, geom2.body))
+
         return

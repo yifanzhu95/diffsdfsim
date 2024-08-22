@@ -132,14 +132,14 @@ class World:
             #ic(self.t, end_t)
             while self.t < end_t:
                 dt = end_t - self.t
-                self.step_dt(dt)
+                fc = self.step_dt(dt)
                 if self.contacts:
                     had_contacts = True
         else:
-            self.step_dt(dt)
+            fc = self.step_dt(dt)
             if self.contacts:
                 had_contacts = True
-        return had_contacts
+        return had_contacts, fc
 
     class H(Function):
         @staticmethod
@@ -246,6 +246,7 @@ class World:
         #       larger accelerations when timesteps get smaller and that can become problematic.
         start_v = self.v
         start_contacts = self.contacts
+        self.start_contacts = self.contacts
         while True:
 
             dt_ = dt
@@ -256,7 +257,7 @@ class World:
                 dt_joint = self.last_dt.detach() + dt_
                 dt_ = -self.last_dt + dt_joint
 
-            new_v = self.engine.solve_dynamics(self, dt_)
+            new_v, fc  = self.engine.solve_dynamics(self, dt_)
             #to comply with pybullet integration scheme 
             #x = x + v*dt
             #v = v + 0.5*a*dt
@@ -382,6 +383,7 @@ class World:
 
         self.t += dt
         
+        return fc
 
     def get_v(self):
         return self.v
