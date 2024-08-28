@@ -641,7 +641,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         if len(xyz) < 1:
             return
         
-        (v,f,n) = sap_body.mesh_world
+        (v,f,n) = sap_body.get_mesh()
         f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
         v_numpy = v.squeeze(0).detach().cpu().numpy()
         xyz_numpy = xyz.detach().cpu().numpy()
@@ -674,11 +674,12 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #TODO can do contact clustering
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
         # min_index = torch.argmin(normals[:,2])
-        # max_index = torch.argmax(normals[:,2])
-        # if b2.type == 'terrain':
+        max_index = torch.argmax(normals[:,2])
+        # if 'robot' in types and 'obj' in types:
         #     # ic(normals[min_index],b1.type, b2.type)
         #     ic(normals[max_index], xyz[max_index])
-
+        #     ic(torch.max(pens).cpu().detach().numpy())
+        #     ic(b1.pos - b2.pos)
         other_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask]- other_body.pos
         sap_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask] - sap_body.pos
         pts = []
