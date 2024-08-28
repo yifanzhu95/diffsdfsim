@@ -107,7 +107,6 @@ class World3D(World):
                                   torch.stack([dir3, dir4])
                                   ], dim=0)
             dirs = torch.cat([dirs, -dirs], dim=0)
-
             J1 = torch.cat([torch.cross(c[1].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
             J2 = torch.cat([torch.cross(c[2].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
 

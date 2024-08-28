@@ -149,8 +149,8 @@ def LCPFunction(eps=1e-12, verbose=0, notImprovedLim=3,
             else:
                 assert False
             ctx.save_for_backward(zhats, Q_, p_, G_, h_, A_, b_, F_)
-            lams = ctx.lams
-            nus = ctx.nus
+            # lams = ctx.lams
+            # nus = ctx.nus
             return zhats
 
         @staticmethod

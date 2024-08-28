@@ -121,7 +121,39 @@ class LinearVelConstraint:
 
     def J(self):
         J = self.pos.new_tensor([[0,0,0, 1, 0, 0],[0,0,0,0,1,0],[0,0,0,0,0,1]])
-        b = self.pos.new_tensor(self.vel)
+        b = self.pos.new_tensor(-self.vel)
+        return J, None, b
+
+    def move(self, dt):
+        return 
+        #self.update_pos()
+
+    def update_pos(self):
+        self.pos = self.body1.pos
+        self.rot1 = self.body1.p[0]
+
+    def draw(self, screen, pixels_per_meter=1):
+        pos = (self.pos.detach().cpu().numpy() * pixels_per_meter).astype(int)
+        return [pygame.draw.line(screen, (0, 255, 0), pos - [0, 5], pos + [0, 5], 2)]
+    
+class ZeroVelConstraint:
+    def __init__(self, body1, dims):
+        self.static = True
+        self.num_constraints = len(dims)
+        self.body1 = body1
+        self.pos = body1.pos
+        self.rot1 = self.body1.p[0]
+        self.body2 = self.rot2 = None
+        self.dims = dims
+
+    def J(self):
+        J = []
+        for dim in self.dims:
+            row = [0]*6
+            row[dim] = 1
+            J.append(row)
+        J = self.pos.new_tensor(J)
+        b = self.pos.new_tensor([0]*self.num_constraints)
         return J, None, b
 
     def move(self, dt):
@@ -134,6 +166,7 @@ class LinearVelConstraint:
     def draw(self, screen, pixels_per_meter=1):
         pos = (self.pos.detach().cpu().numpy() * pixels_per_meter).astype(int)
         return [pygame.draw.line(screen, (0, 255, 0), pos - [0, 5], pos + [0, 5], 2)]
+    
 
 class RotConstraint3D(RotConstraint):
     def __init__(self, body1):

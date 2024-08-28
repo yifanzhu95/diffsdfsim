@@ -88,7 +88,6 @@ class World:
         # XXX Better way for diagonal block matrix?
         for i, b in enumerate(bodies):
             self._M[i * M_size:(i + 1) * M_size, i * M_size:(i + 1) * M_size] = b.M
-
         self.set_v(torch.cat([b.v for b in bodies]))
 
         self.contacts = None
@@ -103,6 +102,20 @@ class World:
         self.stop_friction_grad = stop_friction_grad
 
 
+    def reset_eq_constraints(self, constraints):
+        self.static_inverse = True
+        self.num_constraints = 0
+        self.joints = []
+        for j in constraints:
+            b1, b2 = j.body1, j.body2
+            i1 = self.bodies.index(b1)
+            i2 = self.bodies.index(b2) if b2 else None
+            self.joints.append((j, i1, i2))
+            self.num_constraints += j.num_constraints
+            if not j.static:
+                self.static_inverse = False
+        
+
     def undo_step(self):
         # XXX Clones necessary?
         self.t = self.start_t
@@ -116,7 +129,7 @@ class World:
             self.trajectory = self.trajectory[:-1]
 
 
-    def step(self, fixed_dt=False):
+    def step(self, fixed_dt=False, time_halving = True):
         self.start_p = torch.cat([b.p for b in self.bodies])
         self.start_rot_joints = [(j[0].rot1, j[0].rot2) for j in self.joints]
         self.start_v = self.v
@@ -126,17 +139,15 @@ class World:
         had_contacts = False
         dt = self.dt
         if fixed_dt:
-            from icecream import ic
-            
             end_t = self.t + self.dt
             #ic(self.t, end_t)
             while self.t < end_t:
                 dt = end_t - self.t
-                fc = self.step_dt(dt)
+                fc = self.step_dt(dt, time_halving)
                 if self.contacts:
                     had_contacts = True
         else:
-            fc = self.step_dt(dt)
+            fc = self.step_dt(dt, time_halving)
             if self.contacts:
                 had_contacts = True
         return had_contacts, fc
@@ -239,7 +250,7 @@ class World:
 
 
     # @profile
-    def step_dt(self, dt):
+    def step_dt(self, dt, time_halving = True):
         start_p = torch.cat([b.p for b in self.bodies])
         start_rot_joints = [(j[0].rot1, j[0].rot2) for j in self.joints]
         # INFO: in original LCP code the solver step was done outside the loop. This, however leads to different
@@ -247,6 +258,12 @@ class World:
         start_v = self.v
         start_contacts = self.contacts
         self.start_contacts = self.contacts
+        
+        time_halfing_counter = 0
+        if time_halving:
+            time_halving_limit = 3
+        else:
+            time_halving_limit = -1
         while True:
 
             dt_ = dt
@@ -262,7 +279,6 @@ class World:
             #x = x + v*dt
             #v = v + 0.5*a*dt
             new_v = start_v + (new_v - start_v)/2
-
             self.set_v(new_v)
             # try step with current dt
 
@@ -272,7 +288,6 @@ class World:
                 joint[0].move(dt_)
 
             self.find_contacts()
-
             # Allow interpenetrations, and rely on B. stabilizations to push things out
             #if all([c[0][3].item() <= self.tol for c in self.contacts]):
 
@@ -345,9 +360,11 @@ class World:
                     joint[0].move(dt_)
 
                 self.last_dt = dt_
-
             break
             # else:
+            #     print(time_halfing_counter, time_halving_limit)
+            #     if time_halfing_counter >= time_halving_limit:
+            #         break
             #     if not self.strict_no_pen and dt < self.dt / 2**10:
             #         # if step becomes too small, just continue
             #         break
@@ -360,6 +377,7 @@ class World:
             #     for j, c in zip(self.joints, start_rot_joints):
             #         j[0].rot1 = c[0].clone()
             #         j[0].update_pos()
+            #     time_halfing_counter += 1
 
         if self.post_stab:
             tmp_v = self.v

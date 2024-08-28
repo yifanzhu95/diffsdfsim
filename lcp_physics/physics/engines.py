@@ -23,7 +23,7 @@ class PdipmEngine(Engine):
     """Engine that uses the primal dual interior point method LCP solver.
     """
     def __init__(self, max_iter=30):
-        #self.lcp_solver = LCPFunction
+        self.lcp_solver = LCPFunction
         
         self.cached_inverse = None
         self.max_iter = max_iter
@@ -36,6 +36,7 @@ class PdipmEngine(Engine):
         f = world.apply_forces(t)
         u = torch.matmul(world.M(), world.get_v()) + dt * f
         u = u.float()
+        force = None
         if neq > 0:
             u = torch.cat([u, B])
             #u = torch.cat([u, u.new_zeros(neq)])
@@ -54,7 +55,6 @@ class PdipmEngine(Engine):
             else:
                 inv = self.cached_inverse
             x = torch.matmul(inv, u)  # Kline Eq. 2.41
-            force = None
         else:
             # Solve Mixed LCP (Kline 2.7.2)
             Jc = world.Jc()
@@ -83,44 +83,38 @@ class PdipmEngine(Engine):
             F[:, -mu.size(1):, mu.size(2):mu.size(2) + E.size(1)] = \
                 -E.transpose(1, 2)
 
-            # # Start with creating F as before
-            # F = G.new_zeros(G.size(1), G.size(1)).unsqueeze(0)
-            # # Create a new tensor for each operation
-            # F1 = torch.cat([F[:,Jc.size(1):-E.size(2), :-E.size(2)], E], axis = 2)
-            # F2 = torch.cat([mu, -E.transpose(1,2), F[:,-mu.size(1):,:mu.size(2)]], axis = 2)
-            # F3 = torch.cat([F[:, :Jc.size(1) ,:], F1, F2], axis =1)
-
             # Calculate penetration depths and update h
             penetration_depths = []
             for contact in world.contacts:
                 penetration_depths.append(contact[0][3])
             penetration_depths = torch.cat(penetration_depths).unsqueeze(0).to(v.device).float()
-            # world.penetration_depths = penetration_depths
-            # world.penetration_depths.retain_grad()
 
-            #ic(world)
-            #ic(world.penetration_depths)
-            # ic(penetration_depths)
-            #ic(len(world.contacts))
-            # ic(v.dtype, penetration_depths.dtype, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1)).dtype)
-            # exit()
-            # ic(self.max_iter, world.configs)
-
-            C = world.configs['stabilization_coeff']
+            C = world.configs['stabilization_coeff']/world.configs['dt']
+            #ic(torch.max(penetration_depths))
             copy = penetration_depths.clone()
             copy[penetration_depths < world.configs['contact_eps']] = 0.
             penetration_depths = copy
-            h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
-            #x =- self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
+            h = torch.cat([v + C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
+            x = - self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
+            # ic(Jc.shape, penetration_depths.shape)
+            # exit()
             #ic(self.lcp_solver)
-            self.lcp_solver = LCPFunctionClass(max_iter=self.max_iter, verbose=-1)
-            x, lams, nus = self.lcp_solver.run(M, u, G, h, Je, b, F)
-            x = -x
+            # self.lcp_solver = LCPFunctionClass(max_iter=self.max_iter, verbose=-1)
+            # x, lams, nus = self.lcp_solver.run(M, u, G, h, Je, b, F)
+            # x = -x
+            # nc = len(world.contacts)
+            # ic(torch.bmm(torch.transpose(Jc, 1, 2)[:,:,0:6],lams[:, 0:6].unsqueeze(-1)).squeeze(0))
+            # ic(torch.bmm(torch.transpose(Jf, 1, 2)[:,:,0:8*6],lams[:, nc:nc+8*6].unsqueeze(-1)).squeeze(0))
+            # ic(torch.bmm(torch.transpose(Jc, 1, 2)[:,:,6:],lams[:, 6:nc].unsqueeze(-1)).squeeze(0) + \
+            #     torch.bmm(torch.transpose(Jf, 1, 2)[:,:,8*6:],lams[:, nc+8*6:9*nc].unsqueeze(-1)).squeeze(0))
+
+            #a = torch.matmul(self.simulator.start_Jc().T, (fc[:, 0:nc]).T)
+            #b = torch.matmul(self.simulator.start_Jf().T, (fc[:,nc:9*nc]).T)
             #ic(x.shape, lams.shape, M.shape, G.shape, Je.shape, u.shape)
-            # contact + constraint force
-            force = -(u -  torch.bmm(M, x.unsqueeze(-1)).squeeze(-1))/dt
-            # contact force
-            #force = (-(u -  torch.bmm(M, x.unsqueeze(-1)).squeeze(-1)) - torch.bmm(torch.transpose(Je, 1,2), nus.unsqueeze(-1)).squeeze(-1))/dt
+            # ic(f[6:12], x[:,6:12])
+            # ic(mu)
+            # ic(E)
+            # ic(Jf, Jf.shape)
         new_v = x[:world.vec_len * len(world.bodies)].squeeze(0)
         return new_v, force
 

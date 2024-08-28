@@ -611,8 +611,9 @@ class SaPMeshDiffContactHandler(ContactHandler):
             sap_body = b1
             sap_index = 1
             other_body = b2
-
+        use_other_body_normal = False
         if 'obj' in types and 'terrain' in types:
+            use_other_body_normal = True
             if b1.type == 'obj':
                 sap_body = b1
                 sap_index = 1
@@ -623,7 +624,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 other_body = b1
 
         # GS xyz point position in sdf frame, scaled
-        xyz = other_body.get_xyz()
+        xyz, other_normals = other_body.get_xyz()
+        
         padding = world.configs['collision_detection_padding']
         obj_scale = sap_body.scale_tensor
         # sap is [0, 1)
@@ -634,6 +636,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
         BB_mask = torch.logical_and(BB_mask,xyz[:,2] > 1/obj_scale*(-1 - padding))
         
         xyz = xyz[BB_mask]
+        if use_other_body_normal:
+            other_normals = other_normals[BB_mask]
         if len(xyz) < 1:
             return
         
@@ -658,17 +662,25 @@ class SaPMeshDiffContactHandler(ContactHandler):
         contact_mask = contact_mask & ~isnan.cpu()
         #contact_mask = (sdfs <= 0)[:,0]
         sdfs = sdfs[contact_mask]
-        normals = normals[contact_mask]
         xyz= xyz[contact_mask]
-
+        if use_other_body_normal:
+            normals = -other_normals[contact_mask]
+        else:
+            normals = normals[contact_mask]
         if len(xyz) < 1:
             return
 
         pens = -sdfs.unsqueeze(-1)
         #TODO can do contact clustering
-        #ic(torch.max(pens).cpu().detach().numpy(), len(pens))
-        other_pts = (other_body.get_xyz()[BB_mask])[contact_mask]- other_body.pos
-        sap_pts = (other_body.get_xyz()[BB_mask])[contact_mask] - sap_body.pos
+        #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
+        # min_index = torch.argmin(normals[:,2])
+        # max_index = torch.argmax(normals[:,2])
+        # if b2.type == 'terrain':
+        #     # ic(normals[min_index],b1.type, b2.type)
+        #     ic(normals[max_index], xyz[max_index])
+
+        other_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask]- other_body.pos
+        sap_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask] - sap_body.pos
         pts = []
         if sap_index == 2:
             for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
