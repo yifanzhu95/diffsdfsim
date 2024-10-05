@@ -101,6 +101,8 @@ class World:
         self.stop_contact_grad = stop_contact_grad
         self.stop_friction_grad = stop_friction_grad
 
+        #if first iteration, don't half the time steps
+        self.first_iteration = True
 
     def reset_eq_constraints(self, constraints):
         self.static_inverse = True
@@ -259,11 +261,11 @@ class World:
         start_contacts = self.contacts
         self.start_contacts = self.contacts
         
-        time_halfing_counter = 0
-        if time_halving:
-            time_halving_limit = 3
-        else:
-            time_halving_limit = -1
+        # time_halfing_counter = 0
+        # if time_halving:
+        #     time_halving_limit = 3
+        # else:
+        #     time_halving_limit = -1
         while True:
 
             dt_ = dt
@@ -276,9 +278,10 @@ class World:
 
             new_v, fc  = self.engine.solve_dynamics(self, dt_)
             #to comply with pybullet integration scheme 
-            #x = x + v*dt
-            #v = v + 0.5*a*dt
-            new_v = start_v + (new_v - start_v)/2
+            ##x = x + v*dt
+            ##v = v + 0.5*a*dt
+            #new_v = start_v + (new_v - start_v)/2
+
             self.set_v(new_v)
             # try step with current dt
 
@@ -360,24 +363,29 @@ class World:
                     joint[0].move(dt_)
 
                 self.last_dt = dt_
-            break
-            # else:
-            #     print(time_halfing_counter, time_halving_limit)
-            #     if time_halfing_counter >= time_halving_limit:
-            #         break
-            #     if not self.strict_no_pen and dt < self.dt / 2**10:
-            #         # if step becomes too small, just continue
-            #         break
-            #     dt /= 2
-            #     # reset positions to beginning of step
-            #     # XXX Clones necessary?
-            #     self.set_p(start_p.clone())
-            #     self.set_v(start_v.clone())
-            #     self.contacts = start_contacts
-            #     for j, c in zip(self.joints, start_rot_joints):
-            #         j[0].rot1 = c[0].clone()
-            #         j[0].update_pos()
-            #     time_halfing_counter += 1
+            # break
+            else:
+                # print(time_halfing_counter, time_halving_limit)
+                # if time_halfing_counter >= time_halving_limit:
+                #     break
+                # if not self.strict_no_pen and dt < self.dt / 2**10:
+                #     # if step becomes too small, just continue
+                #     break
+                if self.first_iteration:
+                    break
+
+                if dt < self.dt / 2**10:
+                    break
+                dt /= 2
+                # reset positions to beginning of step
+                # XXX Clones necessary?
+                self.set_p(start_p.clone())
+                self.set_v(start_v.clone())
+                self.contacts = start_contacts
+                for j, c in zip(self.joints, start_rot_joints):
+                    j[0].rot1 = c[0].clone()
+                    j[0].update_pos()
+                time_halfing_counter += 1
 
         if self.post_stab:
             tmp_v = self.v
@@ -400,6 +408,9 @@ class World:
         self.trajectory.append( ( self.t, curr_p, curr_v, curr_contacts, curr_rot_joints ) )
 
         self.t += dt
+        
+        # after first time step is called, set this flag to be False
+        self.first_iteration = False
         
         return fc
 

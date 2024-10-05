@@ -596,8 +596,9 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         if 'obj' not in types:
             return 
-
+        use_other_body_normal = False
         if 'robot' in types and 'obj' in types:
+            use_other_body_normal = True
             if b1.type == 'obj':
                 sap_body = b1
                 sap_index = 1
@@ -611,7 +612,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
             sap_body = b1
             sap_index = 1
             other_body = b2
-        use_other_body_normal = False
+
+        
         if 'obj' in types and 'terrain' in types:
             use_other_body_normal = True
             if b1.type == 'obj':
@@ -641,7 +643,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         if len(xyz) < 1:
             return
         
-        (v,f,n) = sap_body.get_mesh()
+        (v,f,n, _) = sap_body.get_mesh()
         f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
         v_numpy = v.squeeze(0).detach().cpu().numpy()
         xyz_numpy = xyz.detach().cpu().numpy()
@@ -675,11 +677,15 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
         # min_index = torch.argmin(normals[:,2])
         max_index = torch.argmax(normals[:,2])
-        # if 'robot' in types and 'obj' in types:
-        #     # ic(normals[min_index],b1.type, b2.type)
-        #     ic(normals[max_index], xyz[max_index])
-        #     ic(torch.max(pens).cpu().detach().numpy())
-        #     ic(b1.pos - b2.pos)
+        if 'robot' in types and 'obj' in types:
+            # ic(normals[min_index],b1.type, b2.type)
+            #ic(normals[max_index], xyz[max_index])
+            ic(torch.max(pens).cpu().detach().numpy())
+            #ic(normals)
+            #ic(use_other_body_normal)
+            #ic(b1.pos - b2.pos)
+        # if 'terrain' in types and 'obj' in types:
+        #     ic(normals)
         other_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask]- other_body.pos
         sap_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask] - sap_body.pos
         pts = []
