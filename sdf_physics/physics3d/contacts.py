@@ -699,5 +699,4 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         for p in pts:
             world.contacts.append((p, geom1.body, geom2.body))
-
         return
