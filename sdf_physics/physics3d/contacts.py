@@ -513,7 +513,7 @@ class SaPDiffContactHandler(ContactHandler):
                 other_index = 1
 
         # GS xyz point position in sdf frame, scaled
-        xyz_sap_frame = quaternion_apply(quaternion_invert(sap_body.rot), other_body.get_xyz() - sap_body.pos)*sap_body.sap_scale \
+        xyz_sap_frame = quaternion_apply(quaternion_invert(sap_body.rot), other_body.get_pointsnormals()[0] - sap_body.pos)*sap_body.sap_scale \
                         - sap_body.sap_offset
         padding = world.configs['collision_detection_padding']
 
@@ -560,8 +560,8 @@ class SaPDiffContactHandler(ContactHandler):
         normals = normals[contact_mask]
         xyz_sap_frame = xyz_sap_frame[contact_mask]
         pens = -sdfs
-        other_pts = (((other_body.get_xyz()[BB_mask]))[unique_mask])[contact_mask]- other_body.pos
-        sap_pts = (((other_body.get_xyz()[BB_mask]))[unique_mask])[contact_mask] - sap_body.pos
+        other_pts = (((other_body.get_pointsnormals()[0][BB_mask]))[unique_mask])[contact_mask]- other_body.pos
+        sap_pts = (((other_body.get_pointsnormals()[0][BB_mask]))[unique_mask])[contact_mask] - sap_body.pos
         #print(pens)
         pts = []
         if sap_index == 2:
@@ -626,7 +626,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 other_body = b1
 
         # GS xyz point position in sdf frame, scaled
-        xyz, other_normals = other_body.get_xyz()
+        xyz, other_normals = other_body.get_pointsnormals()
         
         padding = world.configs['collision_detection_padding']
         obj_scale = sap_body.scale_tensor
@@ -677,17 +677,17 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
         # min_index = torch.argmin(normals[:,2])
         max_index = torch.argmax(normals[:,2])
-        if 'robot' in types and 'obj' in types:
+        #if 'robot' in types and 'obj' in types:
             # ic(normals[min_index],b1.type, b2.type)
             #ic(normals[max_index], xyz[max_index])
-            ic(torch.max(pens).cpu().detach().numpy())
+            #ic(torch.max(pens).cpu().detach().numpy())
             #ic(normals)
             #ic(use_other_body_normal)
             #ic(b1.pos - b2.pos)
         # if 'terrain' in types and 'obj' in types:
         #     ic(normals)
-        other_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask]- other_body.pos
-        sap_pts = (other_body.get_xyz()[0][BB_mask])[contact_mask] - sap_body.pos
+        other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
+        sap_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask] - sap_body.pos
         pts = []
         if sap_index == 2:
             for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
