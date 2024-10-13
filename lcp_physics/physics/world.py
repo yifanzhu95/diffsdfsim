@@ -302,7 +302,7 @@ class World:
                     break
                 if self.first_iteration:
                     break
-                if dt < self.dt / 2**3:
+                if dt < self.dt / 2**2: #*3
                     break
                 dt /= 2
                 # reset positions to beginning of step
