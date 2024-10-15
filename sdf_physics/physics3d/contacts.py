@@ -671,8 +671,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
             normals = normals[contact_mask]
         if len(xyz) < 1:
             return
-
-        
+        print('-----')
+        ic(torch.min(xyz, dim = 0))
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs.unsqueeze(-1)
             other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
@@ -685,27 +685,21 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 shifted_points = points - min_values
                 # Compute grid indices for each point
                 grid_indices = (shifted_points / cell_size).long()
-                # Create a unique hash for each grid cell
-                hash_size = 100  # Adjust this based on your expected grid size
-                unique_hashes = (grid_indices[:, 0] * hash_size**2 + 
-                                grid_indices[:, 1] * hash_size + 
-                                grid_indices[:, 2])
-                # Find unique hashes and their first occurrences
-                unique_hashes, inverse_indices = torch.unique(unique_hashes, return_inverse=True)
-                # Select the first point for each unique hash
-                mask = torch.zeros_like(inverse_indices, dtype=torch.bool)
-                mask[inverse_indices.unique(return_inverse=True)[1]] = True
-                return mask
+                # Use numpy.unique on the grid indices directly
+                unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
+                return indices
+            
             before_N = len(sdfs)
-            mask = grid_cluster_3d(xyz, cell_size = 0.01)
+            mask = grid_cluster_3d(xyz, 0.01)
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1)
             after_N = len(sdfs)
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask] - other_body.pos
             sap_pts= ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]- sap_body.pos
-            print(f'N of contact poitns before and after: {before_N} and {after_N}')
+            # print(f'N of contact poitns before and after: {before_N} and {after_N}')
         #TODO can do contact clustering
-        ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
+        #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
+            
         # min_index = torch.argmin(normals[:,2])
         max_index = torch.argmax(normals[:,2])
         #if 'robot' in types and 'obj' in types:
