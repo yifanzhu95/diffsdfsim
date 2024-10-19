@@ -139,7 +139,6 @@ class World:
         self.start_v = self.v
         self.start_contacts = self.contacts
         self.start_t = self.t
-
         had_contacts = False
         dt = self.dt
         if fixed_dt:
@@ -261,7 +260,7 @@ class World:
         start_v = self.v
         start_contacts = self.contacts
         self.start_contacts = self.contacts
-
+        
         while True:
 
             dt_ = dt
@@ -271,7 +270,6 @@ class World:
                 # after a collision, the next time step also depends on the time of contact
                 dt_joint = self.last_dt.detach() + dt_
                 dt_ = -self.last_dt + dt_joint
-
             new_v, fc  = self.engine.solve_dynamics(self, dt_)
             #to comply with pybullet integration scheme 
             ##x = x + v*dt
@@ -285,7 +283,6 @@ class World:
                 body.move(dt_)
             for joint in self.joints:
                 joint[0].move(dt_)
-
             self.find_contacts()
             # Allow interpenetrations, and rely on B. stabilizations to push things out
             if all([c[0][3].item() <= self.configs['contact_eps'] for c in self.contacts]):

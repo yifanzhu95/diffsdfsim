@@ -591,7 +591,6 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         b1 = world.bodies[geom1.body]
         b2 = world.bodies[geom2.body]
-
         types = [b1.type, b2.type]
 
         if 'obj' not in types:
@@ -649,6 +648,14 @@ class SaPMeshDiffContactHandler(ContactHandler):
         xyz_numpy = xyz.detach().cpu().numpy()
         trimesh_mesh = trimesh.Trimesh(vertices=v_numpy, faces=f_numpy)
         signed_distances = trimesh.proximity.signed_distance(trimesh_mesh, xyz_numpy)
+        # import open3d as o3d
+        # o3d_pcd = o3d.geometry.PointCloud()
+        # o3d_pcd.points = o3d.utility.Vector3dVector(np.concatenate([v.squeeze(0).detach().cpu().numpy(),\
+        #                                             xyz.squeeze(0).detach().cpu().numpy()], dim = 0))
+        # # o3d_pcd.colors = o3d.utility.Vector3dVector(colors)
+        # # o3d_pcd.normals =  o3d.utility.Vector3dVector(normals)
+        # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
+        # o3d.visualization.draw_geometries([o3d_pcd,coord_frame])
 
         closest_points, distances, face_indices = trimesh.proximity.closest_point(trimesh_mesh, xyz_numpy)
         pt_indeces = f_numpy[face_indices, :]
@@ -657,7 +664,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
         _, normals, torch_dist, isnan = triangle_point_distance_and_normal_batched(
                 xyz,\
                 verteces.float(), \
-                normals.float())
+                normals.float(), \
+                world.configs['norm_padding'])
         signs = torch.from_numpy(np.sign(signed_distances)*-1).to(xyz.device)
         sdfs = torch_dist*signs
         contact_mask = (sdfs <= world.eps).cpu()
@@ -666,13 +674,16 @@ class SaPMeshDiffContactHandler(ContactHandler):
         sdfs = sdfs[contact_mask]
         xyz= xyz[contact_mask]
         if use_other_body_normal:
-            normals = -other_normals[contact_mask]
+            if sap_index == 2:
+                normals = -other_normals[contact_mask]
+            else:
+                normals = other_normals[contact_mask]
         else:
             normals = normals[contact_mask]
         if len(xyz) < 1:
             return
-        print('-----')
-        ic(torch.min(xyz, dim = 0))
+        # print('-----')
+        # ic(torch.min(xyz, dim = 0))
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs.unsqueeze(-1)
             other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
@@ -690,13 +701,16 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 return indices
             
             before_N = len(sdfs)
-            mask = grid_cluster_3d(xyz, 0.01)
+            mask = grid_cluster_3d(xyz, 0.005) #0.005
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1)
+            normals = normals[mask]
             after_N = len(sdfs)
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask] - other_body.pos
             sap_pts= ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]- sap_body.pos
+            # ic(torch.min(xyz[mask], dim = 0))
             # print(f'N of contact poitns before and after: {before_N} and {after_N}')
+        #ic(torch.min(other_pts, axis = 0),b1.type, b2.type, other_body.pos)
         #TODO can do contact clustering
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
             
@@ -710,8 +724,13 @@ class SaPMeshDiffContactHandler(ContactHandler):
             #ic(use_other_body_normal)
             #ic(b1.pos - b2.pos)
         # if 'terrain' in types and 'obj' in types:
+            # ic(normals)
+            # ic(torch.max(pens).cpu().detach().numpy())
+            # max, indeces = torch.max(pens, dim = 0)
+            # ic(other_pts[indeces[0]])
+            # ic(torch.min(other_pts, axis = 0))
+            # ic(torch.max(pens).cpu().detach().numpy(), len(pens))
         #     ic(normals)
-        
         pts = []
         if sap_index == 2:
             for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
@@ -720,7 +739,6 @@ class SaPMeshDiffContactHandler(ContactHandler):
             normals *= -1 
             for normal, pt1, pt2, pen in zip(normals, sap_pts, other_pts, pens):
                 pts.append((normal, pt1, pt2, pen))
-
         for p in pts:
             world.contacts.append((p, geom1.body, geom2.body))
         return
