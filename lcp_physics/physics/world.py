@@ -260,7 +260,7 @@ class World:
         start_v = self.v
         start_contacts = self.contacts
         self.start_contacts = self.contacts
-        
+        # ic(start_v)
         while True:
 
             dt_ = dt
@@ -271,6 +271,7 @@ class World:
                 dt_joint = self.last_dt.detach() + dt_
                 dt_ = -self.last_dt + dt_joint
             new_v, fc  = self.engine.solve_dynamics(self, dt_)
+            # ic(new_v, dt_)
             #to comply with pybullet integration scheme 
             ##x = x + v*dt
             ##v = v + 0.5*a*dt

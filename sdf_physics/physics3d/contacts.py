@@ -587,6 +587,9 @@ class SaPMeshDiffContactHandler(ContactHandler):
         self.debug_callback = OdeContactHandler()
 
     def __call__(self, args, geom1, geom2):
+        """
+        confused!! Is normal out of b2 or b1???
+        """
         world = args[0]
 
         b1 = world.bodies[geom1.body]
@@ -627,16 +630,20 @@ class SaPMeshDiffContactHandler(ContactHandler):
         # world frame
         xyz, other_normals = other_body.get_pointsnormals()
         
+        #ic(torch.max(xyz, axis = 0), torch.min(xyz, axis = 0))
+
         padding = world.configs['collision_detection_padding']
         obj_scale = sap_body.scale_tensor
         # sap is [0, 1)
-        BB_mask = torch.logical_and(xyz[:,0] < 1/obj_scale*(1 + padding), xyz[:,0] > 1/obj_scale*(-1 - padding))
-        BB_mask = torch.logical_and(BB_mask,xyz[:,1] < 1/obj_scale*(1 + padding))
-        BB_mask = torch.logical_and(BB_mask,xyz[:,1] > 1/obj_scale*(-1 - padding))
-        BB_mask = torch.logical_and(BB_mask,xyz[:,2] < 1/obj_scale*(1 + padding))
-        BB_mask = torch.logical_and(BB_mask,xyz[:,2] > 1/obj_scale*(-1 - padding))
-        
+        sap_pos = sap_body.pos
+        BB_mask = torch.logical_and(xyz[:,0] < 1/obj_scale*(1 + padding) + sap_pos[0], xyz[:,0] > 1/obj_scale*(-1 - padding)+ sap_pos[0])
+        BB_mask = torch.logical_and(BB_mask,xyz[:,1] < 1/obj_scale*(1 + padding)+ sap_pos[1])
+        BB_mask = torch.logical_and(BB_mask,xyz[:,1] > 1/obj_scale*(-1 - padding)+ sap_pos[1])
+        BB_mask = torch.logical_and(BB_mask,xyz[:,2] < 1/obj_scale*(1 + padding)+ sap_pos[2])
+        BB_mask = torch.logical_and(BB_mask,xyz[:,2] > 1/obj_scale*(-1 - padding)+ sap_pos[2])
         xyz = xyz[BB_mask]
+
+
         if use_other_body_normal:
             other_normals = other_normals[BB_mask]
         if len(xyz) < 1:
@@ -662,28 +669,26 @@ class SaPMeshDiffContactHandler(ContactHandler):
         verteces = v[0,pt_indeces,:]
         normals = n[0,pt_indeces,:]
         _, normals, torch_dist, isnan = triangle_point_distance_and_normal_batched(
-                xyz,\
-                verteces.float(), \
-                normals.float(), \
+                xyz.double(),\
+                verteces.double(), \
+                normals.double(), \
                 world.configs['norm_padding'])
         signs = torch.from_numpy(np.sign(signed_distances)*-1).to(xyz.device)
         sdfs = torch_dist*signs
+        sdfs = sdfs.double()
         contact_mask = (sdfs <= world.eps).cpu()
         contact_mask = contact_mask & ~isnan.cpu()
         #contact_mask = (sdfs <= 0)[:,0]
         sdfs = sdfs[contact_mask]
         xyz= xyz[contact_mask]
         if use_other_body_normal:
-            if sap_index == 2:
-                normals = -other_normals[contact_mask]
-            else:
-                normals = other_normals[contact_mask]
+            normals = other_normals[contact_mask]
         else:
             normals = normals[contact_mask]
+        normals = normals.float()
         if len(xyz) < 1:
             return
-        # print('-----')
-        # ic(torch.min(xyz, dim = 0))
+
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs.unsqueeze(-1)
             other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
@@ -699,13 +704,10 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 # Use numpy.unique on the grid indices directly
                 unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
                 return indices
-            
-            before_N = len(sdfs)
             mask = grid_cluster_3d(xyz, 0.005) #0.005
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1)
             normals = normals[mask]
-            after_N = len(sdfs)
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask] - other_body.pos
             sap_pts= ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]- sap_body.pos
             # ic(torch.min(xyz[mask], dim = 0))
@@ -724,21 +726,28 @@ class SaPMeshDiffContactHandler(ContactHandler):
             #ic(use_other_body_normal)
             #ic(b1.pos - b2.pos)
         # if 'terrain' in types and 'obj' in types:
-            # ic(normals)
-            # ic(torch.max(pens).cpu().detach().numpy())
-            # max, indeces = torch.max(pens, dim = 0)
-            # ic(other_pts[indeces[0]])
-            # ic(torch.min(other_pts, axis = 0))
-            # ic(torch.max(pens).cpu().detach().numpy(), len(pens))
-        #     ic(normals)
+        #     # ic(normals)
+        #     ic(torch.max(pens).cpu().detach().numpy())
+        #     max, indeces = torch.max(pens, dim = 0)
+        #     ic(other_pts[indeces[0]])
+        #     ic(normals[indeces[0]])
+        #     # ic(torch.min(other_pts, axis = 0))
+        #     # ic(torch.max(pens).cpu().detach().numpy(), len(pens))
+        # #     ic(normals)
         pts = []
+        normals = normals.double()
         if sap_index == 2:
+            if use_other_body_normal:
+                normals *= -1
             for normal, pt1, pt2, pen in zip(normals, other_pts, sap_pts, pens):
                 pts.append((normal, pt1, pt2, pen))
         elif sap_index == 1:
-            normals *= -1 
+            if not use_other_body_normal:
+                normals *= -1 
             for normal, pt1, pt2, pen in zip(normals, sap_pts, other_pts, pens):
                 pts.append((normal, pt1, pt2, pen))
+            # ic(normal, pt1, pt2, pen)
+        #ic(torch.max(normals, axis = 0), b1.type, b2.type)
         for p in pts:
             world.contacts.append((p, geom1.body, geom2.body))
         return

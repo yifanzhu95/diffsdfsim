@@ -30,11 +30,13 @@ class PdipmEngine(Engine):
 
     # @profile
     def solve_dynamics(self, world, dt):
+        # ic('flag')
         t = world.t
         Je, B = world.Je()
         neq = Je.size(0) if Je.ndimension() > 0 else 0
         f = world.apply_forces(t)
         u = torch.matmul(world.M(), world.get_v()) + dt * f
+        # ic(dt, dt*f, u)
         u = u.float()
         force = None
         if neq > 0:
@@ -89,12 +91,12 @@ class PdipmEngine(Engine):
                 penetration_depths.append(contact[0][3])
             penetration_depths = torch.cat(penetration_depths).unsqueeze(0).to(v.device).float()
 
-            C = world.configs['stabilization_coeff']/world.configs['dt']
+            C = world.configs['stabilization_coeff'] #/world.configs['dt']
             #ic(torch.max(penetration_depths))
             copy = penetration_depths.clone()
             copy[penetration_depths < world.configs['contact_eps']] = 0.
             penetration_depths = copy
-            h = torch.cat([v + C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
+            h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
             x = - self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F)
             # ic(Jc.shape, penetration_depths.shape)
             # exit()
