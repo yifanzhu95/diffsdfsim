@@ -655,14 +655,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         xyz_numpy = xyz.detach().cpu().numpy()
         trimesh_mesh = trimesh.Trimesh(vertices=v_numpy, faces=f_numpy)
         signed_distances = trimesh.proximity.signed_distance(trimesh_mesh, xyz_numpy)
-        # import open3d as o3d
-        # o3d_pcd = o3d.geometry.PointCloud()
-        # o3d_pcd.points = o3d.utility.Vector3dVector(np.concatenate([v.squeeze(0).detach().cpu().numpy(),\
-        #                                             xyz.squeeze(0).detach().cpu().numpy()], dim = 0))
-        # # o3d_pcd.colors = o3d.utility.Vector3dVector(colors)
-        # # o3d_pcd.normals =  o3d.utility.Vector3dVector(normals)
-        # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[0, 0, 0])
-        # o3d.visualization.draw_geometries([o3d_pcd,coord_frame])
+
 
         closest_points, distances, face_indices = trimesh.proximity.closest_point(trimesh_mesh, xyz_numpy)
         pt_indeces = f_numpy[face_indices, :]
@@ -693,6 +686,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
             pens = -sdfs.unsqueeze(-1)
             other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
             sap_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask] - sap_body.pos
+
+            tmp = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]
         else:
             def grid_cluster_3d(points, cell_size):
                 # Compute the minimum values for each dimension
@@ -704,14 +699,30 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 # Use numpy.unique on the grid indices directly
                 unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
                 return indices
+            contact_cluster_grid_size = world.configs.get('contact_cluster_grid_size', 0.005)
             mask = grid_cluster_3d(xyz, 0.005) #0.005
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1)
             normals = normals[mask]
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask] - other_body.pos
             sap_pts= ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]- sap_body.pos
+            tmp = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]
             # ic(torch.min(xyz[mask], dim = 0))
             # print(f'N of contact poitns before and after: {before_N} and {after_N}')
+        # ic(tmp)
+        # import open3d as o3d
+        # o3d_pcd1 = o3d.geometry.PointCloud()
+        # o3d_pcd1.points = o3d.utility.Vector3dVector(v.squeeze(0).detach().cpu().numpy())
+        # o3d_pcd1.paint_uniform_color([1,0,0])
+
+        # o3d_pcd2 = o3d.geometry.PointCloud()
+        # o3d_pcd2.points = o3d.utility.Vector3dVector(tmp.detach().cpu().numpy())
+        # o3d_pcd2.paint_uniform_color([0,1,0])
+
+        # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[-0.3360,  0.3794, -0.0172])
+        # o3d.visualization.draw_geometries([coord_frame,o3d_pcd2,o3d_pcd1]) #
+        #ic(b1.type, b2.type, b1.pos, b2.pos)
+        #exit()
         #ic(torch.min(other_pts, axis = 0),b1.type, b2.type, other_body.pos)
         #TODO can do contact clustering
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)

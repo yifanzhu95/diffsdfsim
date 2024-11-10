@@ -106,6 +106,11 @@ class World:
         #if first iteration, don't half the time steps
         self.first_iteration = True
 
+        #Check whether the initial world have deep penetrations
+        self.has_init_penetrations = True
+        if all([c[0][3].item() <= self.configs['contact_eps'] for c in self.contacts]):
+            self.has_init_penetrations = False
+
     def reset_eq_constraints(self, constraints):
         self.static_inverse = True
         self.num_constraints = 0
@@ -271,7 +276,6 @@ class World:
                 dt_joint = self.last_dt.detach() + dt_
                 dt_ = -self.last_dt + dt_joint
             new_v, fc  = self.engine.solve_dynamics(self, dt_)
-            # ic(new_v, dt_)
             #to comply with pybullet integration scheme 
             ##x = x + v*dt
             ##v = v + 0.5*a*dt
@@ -285,106 +289,108 @@ class World:
             for joint in self.joints:
                 joint[0].move(dt_)
             self.find_contacts()
-            # Allow interpenetrations, and rely on B. stabilizations to push things out
-            if all([c[0][3].item() <= self.configs['contact_eps'] for c in self.contacts]):
+            
+            ## determine behavior depending on whether there are initial large penetrations
+            if self.has_init_penetrations: #not halving timesteps, no need for toc computations
                 break
-            else:
-                # if not self.strict_no_pen and dt < self.dt / 2**10:
-                #     # if step becomes too small, just continue
-                #     break
+            else: #original paper way of halving timesteps and computing toc 
+                #debug
+                # max_pen = 0
+                # for  c in self.contacts:
+                #     if c[0][3].item() > max_pen:
+                #         max_pen = c[0][3].item()
+                # ic(max_pen)
+                if all([c[0][3].item() <= self.tol for c in self.contacts]):
+                    # Only compute toc diff for bodies that move into collision in this timestep, i.e. had no contact before
+                    self.toc_contacts = [c for c in self.contacts
+                                        if {c[1], c[2]} not in [{prev_c[1], prev_c[2]} for prev_c in start_contacts]]
+                    # self.toc_contacts = self.contacts
+                    if self.time_of_contact_diff and self.toc_contacts:
+                        print( '\n contacts \n', len(self.contacts) )
 
-                ## only half the time if there are new contacts 
-                toc_contacts = [c for c in self.contacts
-                    if {c[1], c[2]} not in [{prev_c[1], prev_c[2]} for prev_c in start_contacts]]
-                if not toc_contacts:
+                        vs1 = torch.stack([self.bodies[c[1]].v for c in self.toc_contacts])
+                        cs1 = torch.stack([c[0][1] for c in self.toc_contacts])
+                        poss1 = torch.stack([self.bodies[c[1]].pos for c in self.toc_contacts])
+                        rots1 = torch.stack([self.bodies[c[1]].rot for c in self.toc_contacts])
+                        as1 = torch.stack([self.bodies[c[1]].apply_forces(self.t)/self.bodies[c[1]].mass for c in self.toc_contacts])
+                        vs2 = torch.stack([self.bodies[c[2]].v for c in self.toc_contacts])
+                        cs2 = torch.stack([c[0][2] for c in self.toc_contacts])
+                        poss2 = torch.stack([self.bodies[c[2]].pos for c in self.toc_contacts])
+                        rots2 = torch.stack([self.bodies[c[2]].rot for c in self.toc_contacts])
+                        as2 = torch.stack([self.bodies[c[2]].apply_forces(self.t)/self.bodies[c[2]].mass for c in self.toc_contacts])
+
+                        ns = torch.stack([c[0][0] for c in self.toc_contacts])
+
+                        # precalculate quantities needed for time of contact differential
+                        # body velocities before time step: input vs1, vs2
+
+                        # body position and orientation before time step
+                        poss1 -= dt_ * vs1[:, -poss1.shape[1]:]
+                        poss2 -= dt_ * vs2[:, -poss1.shape[1]:]
+
+                        if cs1.shape[1] == 3:
+                            # rotations in world frame
+                            rot1 = so3_exponential_map(-dt_ * vs1[:, :3])
+                            rot2 = so3_exponential_map(-dt_ * vs2[:, :3])
+                            # rotations of body frame to world frame
+                            rots1_mat = quaternion_to_matrix(rots1)
+                            rots2_mat = quaternion_to_matrix(rots2)
+                        if cs1.shape[1] == 2:
+                            rot1 = torch.stack([rotation_matrix(-dt_ * v[0]) for v in vs1])
+                            rot2 = torch.stack([rotation_matrix(-dt_ * v[0]) for v in vs2])
+                            rots1_mat = rotation_matrix(rots1)
+                            rots2_mat = rotation_matrix(rots2)
+                        rots1_mat = rot1.double() @ rots1_mat
+                        rots2_mat = rot2.double() @ rots2_mat
+
+                        # determine contact points in body frames before time step
+                        # contact points are input with rotation in world frame but position relative to body frame origin (in world coordinates)
+                        cs1 = (rots1_mat.transpose(1, 2) @ cs1.unsqueeze(2)).squeeze(2)
+                        cs2 = (rots2_mat.transpose(1, 2) @ cs2.unsqueeze(2)).squeeze(2)
+
+                        # determine contact normal in body frame of shape 2
+                        # contact normal is input in world frame coordinates
+                        ns2 = (rots2_mat.transpose(1, 2) @ ns.unsqueeze(2)).squeeze(2)
+
+
+                        # "Recompute" dt with gradients for contact points
+                        if not torch.is_tensor( dt_ ):
+                            dt_ = cs1.new_tensor(dt_)
+
+                        dt_ = self.H.apply(dt_.double(), cs1.double(), cs2.double(), vs1.double(), \
+                            vs2.double(), poss1.double(), poss2.double(), rots1_mat.double(),\
+                            rots2_mat.double(), ns2.double(), as1.double(), as2.double())
+
+                        # Undo motion
+                        self.set_p(start_p.clone())
+                        for j, c in zip(self.joints, start_rot_joints):
+                            j[0].rot1 = c[0].clone()
+                            j[0].update_pos()
+
+                        # Redo the step with the dt_ that has time-of-impact gradients
+                        for body in self.bodies:
+                            body.move(dt_)
+                        for joint in self.joints:
+                            joint[0].move(dt_)
+
+                        self.last_dt = dt_
+
                     break
-                if self.first_iteration:
-                    break
-                if dt < self.dt / 2**2: #*3
-                    break
-                dt /= 2
-                # reset positions to beginning of step
-                # XXX Clones necessary?
-                self.set_p(start_p.clone())
-                self.set_v(start_v.clone())
-                self.contacts = start_contacts
-                for j, c in zip(self.joints, start_rot_joints):
-                    j[0].rot1 = c[0].clone()
-                    j[0].update_pos()
-                #time_halfing_counter += 1
+                else:
+                    #if not self.strict_no_pen and dt < self.dt / 2**10:
+                    # if step becomes too small, just continue
+                    if dt < self.dt / 2**3:
+                        break
+                    dt /= 2
+                    # reset positions to beginning of step
+                    # XXX Clones necessary?
+                    self.set_p(start_p.clone())
+                    self.set_v(start_v.clone())
+                    self.contacts = start_contacts
+                    for j, c in zip(self.joints, start_rot_joints):
+                        j[0].rot1 = c[0].clone()
+                        j[0].update_pos()
 
-        # Only compute toc diff for bodies that move into collision in this timestep, i.e. had no contact before
-        self.toc_contacts = [c for c in self.contacts
-                                if {c[1], c[2]} not in [{prev_c[1], prev_c[2]} for prev_c in start_contacts]]
-        
-        if self.time_of_contact_diff and self.toc_contacts:
-            start_time = time.time()
-            #print( '\n contacts \n', len(self.contacts) )
-            vs1 = torch.stack([self.bodies[c[1]].v for c in self.toc_contacts])
-            cs1 = torch.stack([c[0][1] for c in self.toc_contacts])
-            poss1 = torch.stack([self.bodies[c[1]].pos for c in self.toc_contacts])
-            rots1 = torch.stack([self.bodies[c[1]].rot for c in self.toc_contacts])
-            as1 = torch.stack([self.bodies[c[1]].apply_forces(self.t)/self.bodies[c[1]].mass for c in self.toc_contacts])
-            vs2 = torch.stack([self.bodies[c[2]].v for c in self.toc_contacts])
-            cs2 = torch.stack([c[0][2] for c in self.toc_contacts])
-            poss2 = torch.stack([self.bodies[c[2]].pos for c in self.toc_contacts])
-            rots2 = torch.stack([self.bodies[c[2]].rot for c in self.toc_contacts])
-            as2 = torch.stack([self.bodies[c[2]].apply_forces(self.t)/self.bodies[c[2]].mass for c in self.toc_contacts])
-
-            ns = torch.stack([c[0][0] for c in self.toc_contacts])
-
-            # precalculate quantities needed for time of contact differential
-            # body velocities before time step: input vs1, vs2
-
-            # body position and orientation before time step
-            poss1 -= dt_ * vs1[:, -poss1.shape[1]:]
-            poss2 -= dt_ * vs2[:, -poss1.shape[1]:]
-
-            if cs1.shape[1] == 3:
-                # rotations in world frame
-                rot1 = so3_exponential_map(-dt_ * vs1[:, :3])
-                rot2 = so3_exponential_map(-dt_ * vs2[:, :3])
-                # rotations of body frame to world frame
-                rots1_mat = quaternion_to_matrix(rots1)
-                rots2_mat = quaternion_to_matrix(rots2)
-            if cs1.shape[1] == 2:
-                rot1 = torch.stack([rotation_matrix(-dt_ * v[0]) for v in vs1])
-                rot2 = torch.stack([rotation_matrix(-dt_ * v[0]) for v in vs2])
-                rots1_mat = rotation_matrix(rots1)
-                rots2_mat = rotation_matrix(rots2)
-            rots1_mat = rot1 @ rots1_mat.float()
-            rots2_mat = rot2 @ rots2_mat.float()
-
-            # determine contact points in body frames before time step
-            # contact points are input with rotation in world frame but position relative to body frame origin (in world coordinates)
-            cs1 = (rots1_mat.transpose(1, 2) @ cs1.unsqueeze(2).float()).squeeze(2)
-            cs2 = (rots2_mat.transpose(1, 2) @ cs2.unsqueeze(2).float()).squeeze(2)
-
-            # determine contact normal in body frame of shape 2
-            # contact normal is input in world frame coordinates
-            ns2 = (rots2_mat.transpose(1, 2) @ ns.unsqueeze(2).float()).squeeze(2)
-
-
-            # "Recompute" dt with gradients for contact points
-            if not torch.is_tensor( dt_ ):
-                dt_ = cs1.new_tensor(dt_)
-
-            dt_ = self.H.apply(dt_, cs1, cs2, vs1, vs2, poss1, poss2, rots1_mat, rots2_mat, ns2, as1, as2)
-
-            # Undo motion
-            self.set_p(start_p.clone())
-            for j, c in zip(self.joints, start_rot_joints):
-                j[0].rot1 = c[0].clone()
-                j[0].update_pos()
-
-            # Redo the step with the dt_ that has time-of-impact gradients
-            for body in self.bodies:
-                body.move(dt_)
-            for joint in self.joints:
-                joint[0].move(dt_)
-
-            self.last_dt = dt_
-            print(f'Elasped time for toc: {time.time() - start_time}')
         if self.post_stab:
             tmp_v = self.v
             dp = self.engine.post_stabilization(self).squeeze(0)
