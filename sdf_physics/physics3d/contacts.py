@@ -629,7 +629,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         # world frame
         xyz, other_normals = other_body.get_pointsnormals()
-        
+        xyz_copy = xyz.clone()
         #ic(torch.max(xyz, axis = 0), torch.min(xyz, axis = 0))
 
         padding = world.configs['collision_detection_padding']
@@ -643,13 +643,28 @@ class SaPMeshDiffContactHandler(ContactHandler):
         BB_mask = torch.logical_and(BB_mask,xyz[:,2] > 1/obj_scale*(-1 - padding)+ sap_pos[2])
         xyz = xyz[BB_mask]
 
-
         if use_other_body_normal:
             other_normals = other_normals[BB_mask]
+
+        # (v,f,n, _) = sap_body.get_mesh()
+        # if 'robot' in types and 'obj' in types:
+        #     import open3d as o3d
+        #     o3d_pcd1 = o3d.geometry.PointCloud()
+        #     o3d_pcd1.points = o3d.utility.Vector3dVector(v.squeeze(0).detach().cpu().numpy())
+        #     o3d_pcd1.paint_uniform_color([1,0,0])
+
+        #     o3d_pcd2 = o3d.geometry.PointCloud()
+        #     o3d_pcd2.points = o3d.utility.Vector3dVector(xyz_copy.detach().cpu().numpy()) #tmp.detach().cpu().numpy())
+        #     o3d_pcd2.paint_uniform_color([0,1,0])
+
+        #     coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[-0.3360 + 0.025,  0.3794, -0.0172])
+        #     o3d.visualization.draw_geometries([coord_frame,o3d_pcd2,o3d_pcd1]) #
+
+        #     exit()    
         if len(xyz) < 1:
             return
-        
         (v,f,n, _) = sap_body.get_mesh()
+        
         f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
         v_numpy = v.squeeze(0).detach().cpu().numpy()
         xyz_numpy = xyz.detach().cpu().numpy()
@@ -679,8 +694,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         else:
             normals = normals[contact_mask]
         normals = normals.float()
-        if len(xyz) < 1:
-            return
+
 
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs.unsqueeze(-1)
@@ -718,29 +732,29 @@ class SaPMeshDiffContactHandler(ContactHandler):
         # o3d_pcd2 = o3d.geometry.PointCloud()
         # o3d_pcd2.points = o3d.utility.Vector3dVector(tmp.detach().cpu().numpy())
         # o3d_pcd2.paint_uniform_color([0,1,0])
-
-        # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[-0.3360,  0.3794, -0.0172])
+        # coord_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.1, origin=[-0.3360 + 0.02,  0.3794, -0.0172])
         # o3d.visualization.draw_geometries([coord_frame,o3d_pcd2,o3d_pcd1]) #
         #ic(b1.type, b2.type, b1.pos, b2.pos)
-        #exit()
+        # exit()
         #ic(torch.min(other_pts, axis = 0),b1.type, b2.type, other_body.pos)
         #TODO can do contact clustering
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
-            
-        # min_index = torch.argmin(normals[:,2])
-        max_index = torch.argmax(normals[:,2])
-        #if 'robot' in types and 'obj' in types:
-            # ic(normals[min_index],b1.type, b2.type)
-            #ic(normals[max_index], xyz[max_index])
-            #ic(torch.max(pens).cpu().detach().numpy())
-            #ic(normals)
-            #ic(use_other_body_normal)
-            #ic(b1.pos - b2.pos)
+        
+        if 'robot' in types and 'obj' in types and len(normals) > 0:
+            ic(normals.shape)
+            min_index = torch.argmin(normals[:,2])
+            max_index = torch.argmax(normals[:,2])
+            ic(normals[min_index],b1.type, b2.type)
+            ic(normals[max_index], xyz[max_index])
+            ic(torch.max(pens).cpu().detach().numpy())
+            ic(normals)
+            ic(use_other_body_normal)
+            ic(b1.pos - b2.pos)
         # if 'terrain' in types and 'obj' in types:
         #     # ic(normals)
         #     ic(torch.max(pens).cpu().detach().numpy())
         #     max, indeces = torch.max(pens, dim = 0)
-        #     ic(other_pts[indeces[0]])
+        #     ic(other_pts[indeces[0]]) 
         #     ic(normals[indeces[0]])
         #     # ic(torch.min(other_pts, axis = 0))
         #     # ic(torch.max(pens).cpu().detach().numpy(), len(pens))

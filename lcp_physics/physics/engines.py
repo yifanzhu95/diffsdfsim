@@ -92,6 +92,7 @@ class PdipmEngine(Engine):
             penetration_depths = torch.cat(penetration_depths).unsqueeze(0).to(v.device).float()
 
             C = world.configs['stabilization_coeff'] #/world.configs['dt']
+            #ic(C)
             #ic(torch.max(penetration_depths))
             copy = penetration_depths.clone()
             copy[penetration_depths < world.configs['contact_eps']] = 0.
