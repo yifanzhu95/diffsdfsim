@@ -193,8 +193,8 @@ class World:
             posjh = poss2 + h * vs2[:, -poss1.shape[1]:] + 0.5 * as2[:, -poss1.shape[1]:] * h * h
 
             cih_in_w = Rih @ cs1.unsqueeze(2) + posih.unsqueeze(2)
-            cih_in_j = (Rjh.transpose(1, 2).double() @ (cih_in_w - posjh.unsqueeze(2) )).squeeze(2)
-            return (ns2.unsqueeze(1).double() @ (cs2.double() - cih_in_j).unsqueeze(2)).squeeze(2)
+            cih_in_j = (Rjh.transpose(1, 2) @ (cih_in_w - posjh.unsqueeze(2) )).squeeze(2)
+            return (ns2.unsqueeze(1) @ (cs2 - cih_in_j).unsqueeze(2)).squeeze(2)
 
 
         @staticmethod
@@ -362,17 +362,17 @@ class World:
                 rot2 = torch.stack([rotation_matrix(-dt_ * v[0]) for v in vs2])
                 rots1_mat = rotation_matrix(rots1)
                 rots2_mat = rotation_matrix(rots2)
-            rots1_mat = rot1 @ rots1_mat.float()
-            rots2_mat = rot2 @ rots2_mat.float()
+            rots1_mat = rot1 @ rots1_mat.double()
+            rots2_mat = rot2 @ rots2_mat.double()
 
             # determine contact points in body frames before time step
             # contact points are input with rotation in world frame but position relative to body frame origin (in world coordinates)
-            cs1 = (rots1_mat.transpose(1, 2) @ cs1.unsqueeze(2).float()).squeeze(2)
-            cs2 = (rots2_mat.transpose(1, 2) @ cs2.unsqueeze(2).float()).squeeze(2)
+            cs1 = (rots1_mat.transpose(1, 2) @ cs1.unsqueeze(2).double()).squeeze(2)
+            cs2 = (rots2_mat.transpose(1, 2) @ cs2.unsqueeze(2).double()).squeeze(2)
 
             # determine contact normal in body frame of shape 2
             # contact normal is input in world frame coordinates
-            ns2 = (rots2_mat.transpose(1, 2) @ ns.unsqueeze(2).float()).squeeze(2)
+            ns2 = (rots2_mat.transpose(1, 2) @ ns.unsqueeze(2).double()).squeeze(2)
 
 
             # "Recompute" dt with gradients for contact points
@@ -446,6 +446,7 @@ class World:
             ##v = v + 0.5*a*dt
             #new_v = start_v + (new_v - start_v)/2
 
+            #ic(new_v)
             self.set_v(new_v)
             # try step with current dt
 
@@ -529,7 +530,7 @@ class World:
 
                         dt_ = self.H.apply(dt_.double(), cs1.double(), cs2.double(), vs1.double(), \
                             vs2.double(), poss1.double(), poss2.double(), rots1_mat.double(),\
-                            rots2_mat.double(), ns2.double(), as1.double(), as2.double())
+                            rots2_mat.double(), ns2.double(), as1.double(), as2.float())
 
                         # Undo motion
                         self.set_p(start_p.clone())

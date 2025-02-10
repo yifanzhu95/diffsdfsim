@@ -714,7 +714,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
                 return indices
             contact_cluster_grid_size = world.configs.get('contact_cluster_grid_size', 0.005)
-            mask = grid_cluster_3d(xyz, 0.005) #0.005
+            mask = grid_cluster_3d(xyz, contact_cluster_grid_size) #0.005
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1)
             normals = normals[mask]
@@ -740,16 +740,18 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #TODO can do contact clustering
         #ic(torch.max(pens).cpu().detach().numpy(), len(pens),b1.type, b2.type)
         
-        if 'robot' in types and 'obj' in types and len(normals) > 0:
-            ic(normals.shape)
-            min_index = torch.argmin(normals[:,2])
-            max_index = torch.argmax(normals[:,2])
-            ic(normals[min_index],b1.type, b2.type)
-            ic(normals[max_index], xyz[max_index])
-            ic(torch.max(pens).cpu().detach().numpy())
-            ic(normals)
-            ic(use_other_body_normal)
-            ic(b1.pos - b2.pos)
+        #ic(b1.type, b2.type, len(normals))
+        # exit()
+        # len(normals)
+        # if 'robot' in types and 'obj' in types and len(normals) > 0:
+            # min_index = torch.argmin(normals[:,2])
+            # max_index = torch.argmax(normals[:,2])
+            # ic(normals[min_index],b1.type, b2.type)
+            # ic(normals[max_index], xyz[max_index])
+            # ic(torch.max(pens).cpu().detach().numpy())
+            # ic(normals)
+            # ic(use_other_body_normal)
+            # ic(b1.pos - b2.pos)
         # if 'terrain' in types and 'obj' in types:
         #     # ic(normals)
         #     ic(torch.max(pens).cpu().detach().numpy())
