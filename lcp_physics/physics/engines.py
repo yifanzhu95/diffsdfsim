@@ -95,7 +95,7 @@ class PdipmEngine(Engine):
             #ic(C)
             #ic(torch.max(penetration_depths))
             copy = penetration_depths.clone()
-            copy[penetration_depths < world.configs['contact_eps']] = 0.
+            #copy[penetration_depths < world.configs['contact_eps']] = 0.
             penetration_depths = copy
             h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
             x = - self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F) #-1: no output 1:verbose

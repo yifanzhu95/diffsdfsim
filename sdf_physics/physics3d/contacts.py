@@ -645,6 +645,25 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         if use_other_body_normal:
             other_normals = other_normals[BB_mask]
+        if len(xyz) < 1:
+            return
+        # acutally do grid clustering here to further improve efficiency
+        def grid_cluster_3d(points, cell_size):
+            # Compute the minimum values for each dimension
+            min_values, _ = torch.min(points, dim=0)
+            # Shift all points to be non-negative
+            shifted_points = points - min_values
+            # Compute grid indices for each point
+            grid_indices = (shifted_points / cell_size).long()
+            # Use numpy.unique on the grid indices directly
+            unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
+            return indices
+        precluster_mask = grid_cluster_3d(xyz, 0.005)
+        ic(len(xyz), len(other_normals))
+        xyz = xyz[precluster_mask]   
+
+        if use_other_body_normal:
+            other_normals = other_normals[precluster_mask]
 
         # (v,f,n, _) = sap_body.get_mesh()
         # if 'robot' in types and 'obj' in types:
@@ -669,9 +688,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         v_numpy = v.squeeze(0).detach().cpu().numpy()
         xyz_numpy = xyz.detach().cpu().numpy()
         trimesh_mesh = trimesh.Trimesh(vertices=v_numpy, faces=f_numpy)
-        signed_distances = trimesh.proximity.signed_distance(trimesh_mesh, xyz_numpy)
-
-
+        #signed_distances = trimesh.proximity.signed_distance(trimesh_mesh, xyz_numpy)
         closest_points, distances, face_indices = trimesh.proximity.closest_point(trimesh_mesh, xyz_numpy)
         pt_indeces = f_numpy[face_indices, :]
         verteces = v[0,pt_indeces,:]
@@ -681,8 +698,9 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 verteces.double(), \
                 normals.double(), \
                 world.configs['norm_padding'])
-        signs = torch.from_numpy(np.sign(signed_distances)*-1).to(xyz.device)
-        sdfs = torch_dist*signs
+        #signs = torch.from_numpy(np.sign(signed_distances)*-1).to(xyz.device)
+        #sdfs = torch_dist*signs
+        sdfs = torch_dist
         sdfs = sdfs.double()
         contact_mask = (sdfs <= world.eps).cpu()
         contact_mask = contact_mask & ~isnan.cpu()
@@ -695,13 +713,11 @@ class SaPMeshDiffContactHandler(ContactHandler):
             normals = normals[contact_mask]
         normals = normals.float()
 
-
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs.unsqueeze(-1)
-            other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
-            sap_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask] - sap_body.pos
-
-            tmp = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]
+            other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask]- other_body.pos
+            sap_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask] - sap_body.pos
+            #tmp = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]
         else:
             def grid_cluster_3d(points, cell_size):
                 # Compute the minimum values for each dimension
@@ -713,14 +729,15 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 # Use numpy.unique on the grid indices directly
                 unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
                 return indices
-            contact_cluster_grid_size = world.configs.get('contact_cluster_grid_size', 0.005)
+            contact_cluster_grid_size = world.configs['contact_cluster_grid_size']
             mask = grid_cluster_3d(xyz, contact_cluster_grid_size) #0.005
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1)
             normals = normals[mask]
-            other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask] - other_body.pos
-            sap_pts= ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]- sap_body.pos
-            tmp = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]
+            other_pts = (((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask])[mask] - other_body.pos
+            sap_pts= (((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask])[mask]- sap_body.pos
+
+            #tmp = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]
             # ic(torch.min(xyz[mask], dim = 0))
             # print(f'N of contact poitns before and after: {before_N} and {after_N}')
         # ic(tmp)

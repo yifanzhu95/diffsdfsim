@@ -468,7 +468,8 @@ class World:
                     for  c in self.contacts:
                         if c[0][3].item() > max_pen:
                             max_pen = c[0][3].item()
-                    ic(max_pen, self.tol)
+                    #ic(max_pen, self.tol)
+                    #ic(all([c[0][3].item() <= self.tol for c in self.contacts]))
                 except:
                     pass
                 if all([c[0][3].item() <= self.tol for c in self.contacts]):
@@ -550,7 +551,7 @@ class World:
                 else:
                     #if not self.strict_no_pen and dt < self.dt / 2**10:
                     # if step becomes too small, just continue
-                    if dt < self.dt / 2**10: #2**2: #2**5 ?? was this used for realworld drill
+                    if dt < self.dt / 2**5 or dt < 0.0002: 
                         self.has_init_penetrations = True #enforcing non penetration has failed
                         break
                     dt /= 2
