@@ -22,7 +22,7 @@ import torch
 from diffworld.diffsdfsim.lcp_physics.physics import World
 from diffworld.diffsdfsim.lcp_physics.physics.utils import get_instance
 from torch.nn.functional import normalize
-
+from pytorch3d.transforms import quaternion_apply
 from . import contacts as contacts_module
 from .utils import Defaults3D, orthogonal, get_colormap
 
@@ -62,8 +62,8 @@ class World3D(World):
                 c = contact[0]
             i1 = contact[1]
             i2 = contact[2]
-            J1 = torch.cat([torch.cross(c[1], c[0]), c[0]])
-            J2 = -torch.cat([torch.cross(c[2], c[0]), c[0]])
+            J1 = torch.cat([torch.cross(c[1] - quaternion_apply(self.bodies[i1].rot, self.bodies[i1].com), c[0]), c[0]])
+            J2 = -torch.cat([torch.cross(c[2]- quaternion_apply(self.bodies[i1].rot, self.bodies[i2].com), c[0]), c[0]])
             Jc[i, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
             Jc[i, i2 * self.vec_len:(i2 + 1) * self.vec_len] = J2
         return Jc
@@ -77,8 +77,8 @@ class World3D(World):
                 c = contact[0]
             i1 = contact[1]
             i2 = contact[2]
-            J1 = torch.cat([torch.cross(c[1], c[0]), c[0]])
-            J2 = -torch.cat([torch.cross(c[2], c[0]), c[0]])
+            J1 = torch.cat([torch.cross(c[1]- quaternion_apply(self.bodies[i1].rot, self.bodies[i1].com), c[0], c[0]), c[0]])
+            J2 = -torch.cat([torch.cross(c[2]- quaternion_apply(self.bodies[i1].rot, self.bodies[i2].com), c[0]), c[0]])
             Jc[i, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
             Jc[i, i2 * self.vec_len:(i2 + 1) * self.vec_len] = J2
         return Jc
@@ -107,8 +107,8 @@ class World3D(World):
                                   torch.stack([dir3, dir4])
                                   ], dim=0)
             dirs = torch.cat([dirs, -dirs], dim=0)
-            J1 = torch.cat([torch.cross(c[1].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
-            J2 = torch.cat([torch.cross(c[2].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+            J1 = torch.cat([torch.cross((c[1]- quaternion_apply(self.bodies[i1].rot, self.bodies[i1].com)).expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+            J2 = torch.cat([torch.cross((c[2]- quaternion_apply(self.bodies[i1].rot, self.bodies[i2].com)).expand(self.fric_dirs, -1), dirs), dirs], dim=1)
 
             Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
             Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i2 * self.vec_len:(i2 + 1) * self.vec_len] = -J2
@@ -138,9 +138,10 @@ class World3D(World):
                                   ], dim=0)
             dirs = torch.cat([dirs, -dirs], dim=0)
 
-            J1 = torch.cat([torch.cross(c[1].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
-            J2 = torch.cat([torch.cross(c[2].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
-
+            # J1 = torch.cat([torch.cross(c[1].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+            # J2 = torch.cat([torch.cross(c[2].expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+            J1 = torch.cat([torch.cross((c[1]- quaternion_apply(self.bodies[i1].rot, self.bodies[i1].com)).expand(self.fric_dirs, -1), dirs), dirs], dim=1)
+            J2 = torch.cat([torch.cross((c[2]- quaternion_apply(self.bodies[i1].rot, self.bodies[i2].com)).expand(self.fric_dirs, -1), dirs), dirs], dim=1)
             Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i1 * self.vec_len:(i1 + 1) * self.vec_len] = J1
             Jf[i * self.fric_dirs:(i + 1) * self.fric_dirs, i2 * self.vec_len:(i2 + 1) * self.vec_len] = -J2
         return Jf

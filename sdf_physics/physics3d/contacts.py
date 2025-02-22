@@ -659,7 +659,6 @@ class SaPMeshDiffContactHandler(ContactHandler):
             unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
             return indices
         precluster_mask = grid_cluster_3d(xyz, 0.005)
-        ic(len(xyz), len(other_normals))
         xyz = xyz[precluster_mask]   
 
         if use_other_body_normal:
@@ -714,7 +713,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         normals = normals.float()
 
         if len(sdfs) <= world.configs['N_contact_cluster']:  
-            pens = -sdfs.unsqueeze(-1)
+            pens = -sdfs.unsqueeze(-1) + world.eps #add padding 
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask]- other_body.pos
             sap_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask] - sap_body.pos
             #tmp = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]
@@ -732,7 +731,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
             contact_cluster_grid_size = world.configs['contact_cluster_grid_size']
             mask = grid_cluster_3d(xyz, contact_cluster_grid_size) #0.005
             sdfs = sdfs[mask]
-            pens = -sdfs.unsqueeze(-1)
+            pens = -sdfs.unsqueeze(-1) + world.eps #add padding 
             normals = normals[mask]
             other_pts = (((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask])[mask] - other_body.pos
             sap_pts= (((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask])[mask]- sap_body.pos

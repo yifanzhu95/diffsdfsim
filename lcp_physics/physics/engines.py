@@ -22,7 +22,7 @@ class Engine:
 class PdipmEngine(Engine):
     """Engine that uses the primal dual interior point method LCP solver.
     """
-    def __init__(self, max_iter=10):
+    def __init__(self, max_iter=20):
         self.lcp_solver = LCPFunction
         
         self.cached_inverse = None
@@ -91,14 +91,16 @@ class PdipmEngine(Engine):
                 penetration_depths.append(contact[0][3])
             penetration_depths = torch.cat(penetration_depths).unsqueeze(0).to(v.device).float()
 
-            C = world.configs['stabilization_coeff'] #/world.configs['dt']
+            C = world.configs['stabilization_coeff']/dt 
             #ic(C)
             #ic(torch.max(penetration_depths))
             copy = penetration_depths.clone()
-            #copy[penetration_depths < world.configs['contact_eps']] = 0.
+            copy[penetration_depths < world.configs['contact_eps']/2.] = 0.
             penetration_depths = copy
             h = torch.cat([v - C*penetration_depths, v.new_zeros(v.size(0), Jf.size(1) + mu.size(1))], 1)
-            x = - self.lcp_solver(max_iter=self.max_iter, verbose=-1)(M, u, G, h, Je, b, F) #-1: no output 1:verbose
+            x = - self.lcp_solver(max_iter=world.configs['solver_max_iter'], \
+                verbose=world.configs['solver_verbose'],eps=world.configs['solver_eps'])(M, u, G, h, Je, b, F) #-1: no output 1:verbose
+
             # ic(Jc.shape, penetration_depths.shape) 
             # exit()
             #ic(self.lcp_solver)

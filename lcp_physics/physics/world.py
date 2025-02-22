@@ -107,11 +107,11 @@ class World:
         self.first_iteration = True
 
         #Check whether the initial world have deep penetrations
-        self.has_init_penetrations = True
-        if all([c[0][3].item() <= self.configs['contact_eps'] for c in self.contacts]):
-            self.has_init_penetrations = False
-        ic(self.has_init_penetrations)
-
+        # self.has_init_penetrations = True
+        # if all([c[0][3].item() <= self.configs['contact_eps']/2 for c in self.contacts]): #since we now have the padding 
+        #     self.has_init_penetrations = False
+        # ic(self.has_init_penetrations)
+        self.has_init_penetrations = False
         max_pen = 0
         for  c in self.contacts:
             if c[0][3].item() > max_pen:
@@ -296,7 +296,7 @@ class World:
                 joint[0].move(dt_)
             self.find_contacts()
             # Allow interpenetrations, and rely on B. stabilizations to push things out
-            if all([c[0][3].item() <= self.configs['contact_eps'] for c in self.contacts]):
+            if all([c[0][3].item() <= self.configs['contact_eps']/2 for c in self.contacts]):#since we now have the padding 
                 break
             else:
                 # if not self.strict_no_pen and dt < self.dt / 2**10:
@@ -468,8 +468,8 @@ class World:
                     for  c in self.contacts:
                         if c[0][3].item() > max_pen:
                             max_pen = c[0][3].item()
-                    #ic(max_pen, self.tol)
-                    #ic(all([c[0][3].item() <= self.tol for c in self.contacts]))
+                    ic(max_pen, self.tol)
+                    # ic(all([c[0][3].item() <= self.tol for c in self.contacts]))
                 except:
                     pass
                 if all([c[0][3].item() <= self.tol for c in self.contacts]):
@@ -551,8 +551,11 @@ class World:
                 else:
                     #if not self.strict_no_pen and dt < self.dt / 2**10:
                     # if step becomes too small, just continue
-                    if dt < self.dt / 2**5 or dt < 0.0002: 
-                        self.has_init_penetrations = True #enforcing non penetration has failed
+                    if self.configs['no_time_halving']:
+                        break
+
+                    if dt < self.dt / 2**2 or dt < 0.001: 
+                        #self.has_init_penetrations = True #enforcing non penetration has failed
                         break
                     dt /= 2
                     # reset positions to beginning of step
