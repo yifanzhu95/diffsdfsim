@@ -599,7 +599,9 @@ class SaPMeshDiffContactHandler(ContactHandler):
         if 'obj' not in types:
             return 
         use_other_body_normal = False
+        robot_obj_contact = False
         if 'robot' in types and 'obj' in types:
+            robot_obj_contact = True
             use_other_body_normal = True
             if b1.type == 'obj':
                 sap_body = b1
@@ -627,11 +629,11 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 sap_index = 2
                 other_body = b1
 
+
         # world frame
         xyz, other_normals = other_body.get_pointsnormals()
         xyz_copy = xyz.clone()
         #ic(torch.max(xyz, axis = 0), torch.min(xyz, axis = 0))
-
         padding = world.configs['collision_detection_padding']
         obj_scale = sap_body.scale_tensor
         # sap is [0, 1)
@@ -647,6 +649,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
             other_normals = other_normals[BB_mask]
         if len(xyz) < 1:
             return
+        
         # acutally do grid clustering here to further improve efficiency
         def grid_cluster_3d(points, cell_size):
             # Compute the minimum values for each dimension
@@ -658,9 +661,11 @@ class SaPMeshDiffContactHandler(ContactHandler):
             # Use numpy.unique on the grid indices directly
             unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
             return indices
-        precluster_mask = grid_cluster_3d(xyz, 0.005)
+        if robot_obj_contact:
+            precluster_mask = grid_cluster_3d(xyz, 0.0025)
+        else:
+            precluster_mask = grid_cluster_3d(xyz, 0.005)
         xyz = xyz[precluster_mask]   
-
         if use_other_body_normal:
             other_normals = other_normals[precluster_mask]
 
@@ -681,6 +686,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #     exit()    
         if len(xyz) < 1:
             return
+
         (v,f,n, _) = sap_body.get_mesh()
         
         f_numpy = f.squeeze(0).detach().cpu().numpy().astype(int)
@@ -714,9 +720,12 @@ class SaPMeshDiffContactHandler(ContactHandler):
 
         if len(sdfs) <= world.configs['N_contact_cluster']:  
             pens = -sdfs.unsqueeze(-1) + world.eps #add padding 
+            # if robot_obj_contact:
+            #     other_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]- other_body.pos
+            #     sap_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask] - sap_body.pos
+            # else:
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask]- other_body.pos
             sap_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask] - sap_body.pos
-            #tmp = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask]
         else:
             def grid_cluster_3d(points, cell_size):
                 # Compute the minimum values for each dimension
@@ -729,7 +738,10 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
                 return indices
             contact_cluster_grid_size = world.configs['contact_cluster_grid_size']
-            mask = grid_cluster_3d(xyz, contact_cluster_grid_size) #0.005
+            if robot_obj_contact:
+                mask = grid_cluster_3d(xyz, 0.0025)
+            else:
+                mask = grid_cluster_3d(xyz, contact_cluster_grid_size) #0.005
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1) + world.eps #add padding 
             normals = normals[mask]
@@ -776,7 +788,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #     ic(normals[indeces[0]])
         #     # ic(torch.min(other_pts, axis = 0))
         #     # ic(torch.max(pens).cpu().detach().numpy(), len(pens))
-        # #     ic(normals)
+        # ic(robot_obj_contact)
+        # ic(normals)
         pts = []
         normals = normals.double()
         if sap_index == 2:

@@ -462,13 +462,13 @@ class World:
                 break
             else: #original paper way of halving timesteps and computing toc 
                 #debug
-                ic(dt)
+                # ic(dt)
                 try:
                     max_pen = 0
                     for  c in self.contacts:
                         if c[0][3].item() > max_pen:
                             max_pen = c[0][3].item()
-                    ic(max_pen, self.tol)
+                    # ic(max_pen, self.tol)
                     # ic(all([c[0][3].item() <= self.tol for c in self.contacts]))
                 except:
                     pass
@@ -555,6 +555,7 @@ class World:
                         break
 
                     if dt < self.dt / 2**2 or dt < 0.001: 
+                    #if dt < self.dt / 2**4 or dt < 0.0002: 
                         #self.has_init_penetrations = True #enforcing non penetration has failed
                         break
                     dt /= 2
