@@ -628,7 +628,46 @@ class SaPMeshDiffContactHandler(ContactHandler):
                 sap_body = b2
                 sap_index = 2
                 other_body = b1
+        def grid_cluster_3d(points, cell_size):
+            # Compute the minimum values for each dimension
+            min_values, _ = torch.min(points, dim=0)
+            # Shift all points to be non-negative
+            shifted_points = points - min_values
+            # Compute grid indices for each point
+            grid_indices = (shifted_points / cell_size).long()
+            # Use numpy.unique on the grid indices directly
+            unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
+            return indices
 
+        # special treatment for object terrain collision to use object's penetratino into a known terrain of h=0
+        use_special_collision_detection = world.configs.get('use_special_collision_detection', False)
+        if 'obj' in types and 'terrain' in types and use_special_collision_detection:
+            (v,f,n, _) = sap_body.get_mesh()
+            v = v.squeeze(0)
+            pts_contact = v[v[:,2]<world.configs['collision_detection_padding']]
+            contact_cluster_grid_size = world.configs['contact_cluster_grid_size']
+            if len(pts_contact)>0:
+                mask = grid_cluster_3d(pts_contact, contact_cluster_grid_size)
+                pts_contact = pts_contact[mask]
+            distances = pts_contact[:,2] - world.configs['collision_detection_padding']
+            pens = -distances
+            pens = pens.unsqueeze(-1)
+            sap_pts = pts_contact - sap_body.pos
+            if sap_index == 1:
+                normals = torch.tensor([0., 0., 1.]).repeat(len(pts_contact), 1).to(v.device)
+            elif sap_index == 2:
+                normals = torch.tensor([0., 0., -1.]).repeat(len(pts_contact), 1).to(v.device)
+            pts = []
+            normals = normals.double()
+            if sap_index == 2:
+                for normal, pt1, pt2, pen in zip(normals, pts_contact, sap_pts, pens):
+                    pts.append((normal, pt1, pt2, pen))
+            elif sap_index == 1:
+                for normal, pt1, pt2, pen in zip(normals, sap_pts, pts_contact, pens):
+                    pts.append((normal, pt1, pt2, pen))
+            for p in pts:
+                world.contacts.append((p, geom1.body, geom2.body))
+            return
 
         # world frame
         xyz, other_normals = other_body.get_pointsnormals()
@@ -651,16 +690,6 @@ class SaPMeshDiffContactHandler(ContactHandler):
             return
         
         # acutally do grid clustering here to further improve efficiency
-        def grid_cluster_3d(points, cell_size):
-            # Compute the minimum values for each dimension
-            min_values, _ = torch.min(points, dim=0)
-            # Shift all points to be non-negative
-            shifted_points = points - min_values
-            # Compute grid indices for each point
-            grid_indices = (shifted_points / cell_size).long()
-            # Use numpy.unique on the grid indices directly
-            unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
-            return indices
         if robot_obj_contact:
             precluster_mask = grid_cluster_3d(xyz, 0.0025)
         else:
@@ -727,16 +756,6 @@ class SaPMeshDiffContactHandler(ContactHandler):
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask]- other_body.pos
             sap_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask] - sap_body.pos
         else:
-            def grid_cluster_3d(points, cell_size):
-                # Compute the minimum values for each dimension
-                min_values, _ = torch.min(points, dim=0)
-                # Shift all points to be non-negative
-                shifted_points = points - min_values
-                # Compute grid indices for each point
-                grid_indices = (shifted_points / cell_size).long()
-                # Use numpy.unique on the grid indices directly
-                unique_rows, indices = np.unique(grid_indices.cpu().detach().numpy(), axis=0, return_index=True)
-                return indices
             contact_cluster_grid_size = world.configs['contact_cluster_grid_size']
             if robot_obj_contact:
                 mask = grid_cluster_3d(xyz, 0.0025)

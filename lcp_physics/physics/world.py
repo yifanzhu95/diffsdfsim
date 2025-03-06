@@ -116,7 +116,7 @@ class World:
         for  c in self.contacts:
             if c[0][3].item() > max_pen:
                 max_pen = c[0][3].item()
-        ic(max_pen, self.tol)
+        # ic(max_pen, self.tol)
 
     def reset_eq_constraints(self, constraints):
         self.static_inverse = True
@@ -462,14 +462,14 @@ class World:
                 break
             else: #original paper way of halving timesteps and computing toc 
                 #debug
-                # ic(dt)
+                #ic(dt)
                 try:
                     max_pen = 0
                     for  c in self.contacts:
                         if c[0][3].item() > max_pen:
                             max_pen = c[0][3].item()
-                    # ic(max_pen, self.tol)
-                    # ic(all([c[0][3].item() <= self.tol for c in self.contacts]))
+                    #ic(max_pen, self.tol)
+                    #ic(all([c[0][3].item() <= self.tol for c in self.contacts]))
                 except:
                     pass
                 if all([c[0][3].item() <= self.tol for c in self.contacts]):

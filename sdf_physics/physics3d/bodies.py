@@ -24,7 +24,7 @@ import torch
 import trimesh
 from pytorch3d.transforms import matrix_to_quaternion, quaternion_to_matrix, so3_exponential_map, quaternion_multiply, \
     quaternion_apply
-from ev_sdf_utils import marching_cubes, grid_interp
+#from ev_sdf_utils import marching_cubes, grid_interp
 from torch.autograd import Function
 from torch.nn.functional import normalize
 
