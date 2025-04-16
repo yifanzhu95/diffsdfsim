@@ -476,7 +476,6 @@ class World:
                     # Only compute toc diff for bodies that move into collision in this timestep, i.e. had no contact before
                     self.toc_contacts = [c for c in self.contacts
                                         if {c[1], c[2]} not in [{prev_c[1], prev_c[2]} for prev_c in start_contacts]]
-                    # self.toc_contacts = self.contacts
                     if self.time_of_contact_diff and self.toc_contacts:
                         print( '\n contacts \n', len(self.contacts) )
 

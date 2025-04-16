@@ -578,7 +578,6 @@ class SaPDiffContactHandler(ContactHandler):
 
         return
     
-
 class SaPMeshDiffContactHandler(ContactHandler):
     """Differentiable contact handler, operations to calculate contact manifold
     are done in autograd.
@@ -727,11 +726,12 @@ class SaPMeshDiffContactHandler(ContactHandler):
         pt_indeces = f_numpy[face_indices, :]
         verteces = v[0,pt_indeces,:]
         normals = n[0,pt_indeces,:]
-        _, normals, torch_dist, isnan = triangle_point_distance_and_normal_batched(
+        closest_points, normals, torch_dist, isnan = triangle_point_distance_and_normal_batched(
                 xyz.double(),\
                 verteces.double(), \
                 normals.double(), \
                 world.configs['norm_padding'])
+
         #signs = torch.from_numpy(np.sign(signed_distances)*-1).to(xyz.device)
         #sdfs = torch_dist*signs
         sdfs = torch_dist
@@ -741,6 +741,8 @@ class SaPMeshDiffContactHandler(ContactHandler):
         #contact_mask = (sdfs <= 0)[:,0]
         sdfs = sdfs[contact_mask]
         xyz= xyz[contact_mask]
+        closest_points = closest_points[contact_mask]
+
         if use_other_body_normal:
             normals = other_normals[contact_mask]
         else:
@@ -754,7 +756,7 @@ class SaPMeshDiffContactHandler(ContactHandler):
             #     sap_pts = (other_body.get_pointsnormals()[0][BB_mask])[contact_mask] - sap_body.pos
             # else:
             other_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask]- other_body.pos
-            sap_pts = ((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask] - sap_body.pos
+            sap_pts = closest_points - sap_body.pos
         else:
             contact_cluster_grid_size = world.configs['contact_cluster_grid_size']
             if robot_obj_contact:
@@ -764,12 +766,10 @@ class SaPMeshDiffContactHandler(ContactHandler):
             sdfs = sdfs[mask]
             pens = -sdfs.unsqueeze(-1) + world.eps #add padding 
             normals = normals[mask]
+            closest_points = closest_points[mask]
             other_pts = (((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask])[mask] - other_body.pos
-            sap_pts= (((other_body.get_pointsnormals()[0][BB_mask])[precluster_mask])[contact_mask])[mask]- sap_body.pos
+            sap_pts= closest_points - sap_body.pos
 
-            #tmp = ((other_body.get_pointsnormals()[0][BB_mask])[contact_mask])[mask]
-            # ic(torch.min(xyz[mask], dim = 0))
-            # print(f'N of contact poitns before and after: {before_N} and {after_N}')
         # ic(tmp)
         # import open3d as o3d
         # o3d_pcd1 = o3d.geometry.PointCloud()
